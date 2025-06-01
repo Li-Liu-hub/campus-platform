@@ -1,0 +1,37 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: campushub-app
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_USERNAME: root
+      DB_PASSWORD: "123456"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DATABASE: 0
+    ports:
+      - "8080:8080"
+
+  mysql:
+    image: mysql:8.4
+    container_name: campushub-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: campushub
+    ports:
+      - "3307:3306"
+    volumes:
+      - campushub-mysql-data:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    container_name: campushub-redis
+    volumes:
+      - campushub-redis-data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  campushub-mysql-data:
+  campushub-redis-data:

@@ -1,0 +1,11 @@
+# IntelliJ IDEA 本机配置
+.idea/
+*.iml
+
+# Maven 构建产物
+**/target/
+
+# 日志与本地代理元数据
+*.log
+.codex/
+.agents/
