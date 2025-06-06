@@ -10,6 +10,8 @@ services:
       DB_PASSWORD: "123456"
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_USERNAME: root
+      REDIS_PASSWORD: "123456"
       REDIS_DATABASE: 0
     ports:
       - "8080:8080"
@@ -28,9 +30,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: campushub-redis
+    ports:
+      - "127.0.0.1:6380:6379"
     volumes:
       - campushub-redis-data:/data
-    command: redis-server --appendonly yes
+      - ./redis-users.acl:/usr/local/etc/redis/users.acl:ro
+    command: redis-server --appendonly yes --aclfile /usr/local/etc/redis/users.acl
 
 volumes:
   campushub-mysql-data:

@@ -29,6 +29,8 @@
         <module>campushub-infrastructure</module>
         <module>campushub-system</module>
         <module>campushub-user</module>
+        <module>campushub-admin</module>
+        <module>campushub-post</module>
         <module>campushub-web</module>
     </modules>
 
@@ -52,6 +54,16 @@
             <dependency>
                 <groupId>com.campushub</groupId>
                 <artifactId>campushub-user</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.campushub</groupId>
+                <artifactId>campushub-admin</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.campushub</groupId>
+                <artifactId>campushub-post</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
