@@ -43,6 +43,10 @@ public class Post {
     @TableField("post_view_number")
     private Long postViewNumber;
 
+    /** 作者昵称，来自 ch_user 关联查询，非本表字段。 */
+    @TableField(exist = false)
+    private String userNickname;
+
     /** 软删除标识：0 表示未删除，1 表示已删除。 */
     @TableLogic(value = "0", delval = "1")
     @TableField("post_is_delete")

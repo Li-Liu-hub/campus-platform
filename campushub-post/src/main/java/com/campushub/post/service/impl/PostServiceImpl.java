@@ -12,6 +12,7 @@ import com.campushub.post.dto.PostUpdateRequest;
 import com.campushub.post.entity.Post;
 import com.campushub.post.mapper.PostMapper;
 import com.campushub.post.service.PostService;
+import com.campushub.post.vo.PostFeedVO;
 import com.campushub.post.vo.PostPageVO;
 import com.campushub.post.vo.PostVO;
 import lombok.RequiredArgsConstructor;
@@ -114,15 +115,15 @@ public class PostServiceImpl implements PostService {
         stopWatch.stop();
         log.info("条件查询帖子任务耗时 {} ms，命中 {} 条", stopWatch.getTotalTimeMillis(), posts.size());
 
-        List<PostVO> list = posts.stream()
-                .map(this::toPostVO)
+        List<PostFeedVO> list = posts.stream()
+                .map(this::toFeedVO)
                 .toList();
         if (list.size() < pageSize) {
             return new PostPageVO(list, false, null, null);
         }
         // 取满一页说明可能还有更多数据，最后一行即下一页游标
-        PostVO lastPost = list.get(list.size() - 1);
-        return new PostPageVO(list, true, lastPost.createTime(), lastPost.postId());
+        Post lastPost = posts.get(posts.size() - 1);
+        return new PostPageVO(list, true, lastPost.getCreateTime(), lastPost.getPostId());
     }
 
     /** 页大小缺省 20，并限制在 1 到 100 之间。 */
@@ -209,6 +210,18 @@ public class PostServiceImpl implements PostService {
                 post.getPostViewNumber(),
                 post.getCreateTime(),
                 post.getUpdateTime()
+        );
+    }
+
+    /** 将帖子实体转换为信息流列表返回对象，仅保留列表展示所需字段。 */
+    private PostFeedVO toFeedVO(Post post) {
+        return new PostFeedVO(
+                post.getPostId(),
+                post.getUserNickname(),
+                post.getPostTitle(),
+                post.getPostType(),
+                post.getPostViewNumber(),
+                post.getCreateTime()
         );
     }
 }

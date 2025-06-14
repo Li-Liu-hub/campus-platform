@@ -5,12 +5,16 @@
 <mapper namespace="com.campushub.post.mapper.PostMapper">
 
     <select id="selectByCondition" resultType="com.campushub.post.entity.Post">
-        SELECT
+        <!-- NO_BNL 禁用 hash join：join buffer 会打乱主表索引序导致 filesort，
+             逐行 eq_ref 才能保持 Backward index scan，让翻页成本恒定 -->
+        SELECT /*+ NO_BNL(u) */
         p.post_id,
         u.user_nickname,
         p.post_title,
         p.post_type,
-        p.post_view_number
+        p.post_view_number,
+        <!-- create_time 参与游标二元组，必须带回，否则下一页游标为空 -->
+        p.create_time
         FROM ch_post p
         LEFT JOIN ch_user u
         ON u.user_id = p.post_user_id
