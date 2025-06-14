@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campushub.post.mapper.PostMapper">
+
+    <select id="selectByCondition" resultType="com.campushub.post.entity.Post">
+        SELECT
+        p.post_id,
+        u.user_nickname,
+        p.post_title,
+        p.post_type,
+        p.post_view_number
+        FROM ch_post p
+        LEFT JOIN ch_user u
+        ON u.user_id = p.post_user_id
+        AND u.user_is_delete = 0
+        WHERE p.post_is_delete = 0
+        <if test="postType != null and postType != ''">
+            AND p.post_type = #{postType}
+        </if>
+        <if test="postTitle != null and postTitle != ''">
+            <!-- 前缀匹配：语义为"标题以关键词开头"，可走索引 range -->
+            AND p.post_title LIKE CONCAT(#{postTitle}, '%')
+        </if>
+        <if test="cursorTime != null and cursorId != null">
+            <!-- 游标：从上一页末行的 (create_time, post_id) 接着往下找，已读数据不再经过 -->
+            <choose>
+                <when test="orderByAsc">
+                    AND (p.create_time &gt; #{cursorTime}
+                    OR (p.create_time = #{cursorTime} AND p.post_id &gt; #{cursorId}))
+                </when>
+                <otherwise>
+                    AND (p.create_time &lt; #{cursorTime}
+                    OR (p.create_time = #{cursorTime} AND p.post_id &lt; #{cursorId}))
+                </otherwise>
+            </choose>
+        </if>
+        <choose>
+            <when test="orderByAsc">
+                ORDER BY p.create_time ASC, p.post_id ASC
+            </when>
+            <otherwise>
+                ORDER BY p.create_time DESC, p.post_id DESC
+            </otherwise>
+        </choose>
+        LIMIT #{pageSize}
+    </select>
+
+    <update id="increaseViewNumber">
+        <!-- 浏览量原子自增：由数据库单条 UPDATE 保证并发下不丢计数 -->
+        UPDATE ch_post
+        SET post_view_number = post_view_number + 1
+        WHERE post_id = #{postId}
+          AND post_is_delete = 0
+    </update>
+
+</mapper>
