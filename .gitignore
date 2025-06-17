@@ -9,3 +9,10 @@
 *.log
 .codex/
 .agents/
+
+# Tomcat 访问日志挂载目录
+tomcat-logs/
+
+# JMeter 压测原始结果（结论已沉淀到 docs，仓库只保留脚本与计划）
+JMeterTest/results/
+JMeterTest/*.jar
