@@ -107,6 +107,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         throw new IllegalArgumentException("登录设备不存在");
     }
 
+    /** 将 Sa-Token 终端信息转换为不暴露完整 Token 的设备会话对象。 */
     private LoginDeviceSession toLoginDeviceSession(SaTerminalInfo terminal, String currentToken) {
         Object deviceName = terminal.getExtra(DEVICE_NAME_EXTRA_KEY);
         return new LoginDeviceSession(
@@ -142,6 +143,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         }
     }
 
+    /** 校验用户主键不为空，为空时抛出 IllegalArgumentException。 */
     private void requireUserId(Long userId) {
         if (userId == null) {
             throw new IllegalArgumentException("用户 ID 不能为空");

@@ -13,8 +13,15 @@ services:
       REDIS_USERNAME: root
       REDIS_PASSWORD: "123456"
       REDIS_DATABASE: 0
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: root
+      RABBITMQ_PASSWORD: "123456"
     ports:
       - "8080:8080"
+    volumes:
+      # 将 Tomcat 访问日志目录映射到项目根目录
+      - ./tomcat-logs:/app/tomcat/logs
 
   mysql:
     image: mysql:8.4
@@ -37,6 +44,19 @@ services:
       - ./redis-users.acl:/usr/local/etc/redis/users.acl:ro
     command: redis-server --appendonly yes --aclfile /usr/local/etc/redis/users.acl
 
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: campushub-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: root
+      RABBITMQ_DEFAULT_PASS: "123456"
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - campushub-rabbitmq-data:/var/lib/rabbitmq
+
 volumes:
   campushub-mysql-data:
   campushub-redis-data:
+  campushub-rabbitmq-data:

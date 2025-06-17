@@ -13,3 +13,9 @@ spring:
       database: ${REDIS_DATABASE:0}
       timeout: 3s
       connect-timeout: 3s
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:root}
+    password: ${RABBITMQ_PASSWORD:123456}
+    virtual-host: ${RABBITMQ_VHOST:/}

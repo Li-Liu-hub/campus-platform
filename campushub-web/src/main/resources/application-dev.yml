@@ -13,3 +13,21 @@ spring:
       database: ${REDIS_DATABASE:0}
       timeout: 3s
       connect-timeout: 3s
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:root}
+    password: ${RABBITMQ_PASSWORD:123456}
+    virtual-host: ${RABBITMQ_VHOST:/}
+
+server:
+  tomcat:
+    # 指定 Tomcat 工作目录为进程启动目录，否则 access log 会落盘到系统临时目录
+    basedir: .
+    accesslog:
+      enabled: true
+      directory: logs
+      prefix: access_log
+      file-date-format: .yyyy-MM-dd
+      suffix: .log
+      pattern: "%t %r %s %Dms"

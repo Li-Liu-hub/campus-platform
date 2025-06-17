@@ -19,6 +19,7 @@ public record LoginDevice(String deviceType, String deviceId, String deviceName)
         deviceName = defaultValue(deviceName, "UNKNOWN");
     }
 
+    /** 值为空白时返回默认值，否则返回去除首尾空白后的值。 */
     private static String defaultValue(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value.trim();
     }

@@ -15,6 +15,10 @@
         </dependency>
         <dependency>
             <groupId>com.campushub</groupId>
+            <artifactId>campushub-system</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.campushub</groupId>
             <artifactId>campushub-infrastructure</artifactId>
         </dependency>
         <dependency>

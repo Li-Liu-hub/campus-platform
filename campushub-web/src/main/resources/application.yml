@@ -11,6 +11,17 @@ mybatis-plus:
 
 server:
   port: 8080
+  tomcat:
+    basedir: tomcat
+    accesslog:
+      enabled: true
+      directory: logs
+      prefix: access_log
+      suffix: .log
+      # 关闭缓冲，每条请求立即写入文件
+      buffered: false
+      # %D 记录请求处理耗时，本 Tomcat 版本（10.1.x）数值单位为微秒，除以 1000 即毫秒
+      pattern: '%h %l %u %t "%r" %s %b %D'
 
 sa-token:
   token-name: Authorization
