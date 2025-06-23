@@ -36,6 +36,9 @@ public interface RedisService {
     /** 数值自减并返回自减后的结果，键不存在时从 0 开始。 */
     Long decrement(String key, long delta);
 
+    /** 向哈希指定字段累加数值增量并返回累加结果，字段不存在时从 0 开始。 */
+    Long hIncrBy(String key, String field, long delta);
+
     /** 向有序集合写入成员及分数，成员已存在时更新分数。 */
     Boolean zAdd(String key, String member, double score);
 

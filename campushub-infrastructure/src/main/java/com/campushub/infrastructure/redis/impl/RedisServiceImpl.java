@@ -64,6 +64,12 @@ public class RedisServiceImpl implements RedisService {
         return stringRedisTemplate.opsForValue().decrement(key, delta);
     }
 
+    /** 向哈希指定字段累加数值增量。 */
+    @Override
+    public Long hIncrBy(String key, String field, long delta) {
+        return stringRedisTemplate.opsForHash().increment(key, field, delta);
+    }
+
     /** 向有序集合写入成员及分数。 */
     @Override
     public Boolean zAdd(String key, String member, double score) {

@@ -15,7 +15,7 @@ public interface PostService {
     /** 根据帖子 ID 查询未删除帖子。 */
     PostVO getById(Long postId);
 
-    /** 浏览帖子：返回帖子详情并将浏览量原子加一。 */
+    /** 浏览帖子：优先读取详情缓存，并将浏览增量记入 Redis 聚合 Hash，由后续定时任务折叠落库。 */
     PostVO view(Long postId);
 
     /** 按条件游标分页查询未删除帖子。 */

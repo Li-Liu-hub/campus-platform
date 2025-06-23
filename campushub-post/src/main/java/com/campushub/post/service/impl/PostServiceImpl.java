@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.campushub.common.exception.BusinessException;
 import com.campushub.common.exception.ErrorCode;
 import com.campushub.common.util.StringUtils;
+import com.campushub.infrastructure.redis.RedisService;
 import com.campushub.infrastructure.security.AuthenticationService;
 import com.campushub.post.constant.PostCategories;
 import com.campushub.post.dto.PostCreateRequest;
@@ -15,13 +16,16 @@ import com.campushub.post.service.PostService;
 import com.campushub.post.vo.PostFeedVO;
 import com.campushub.post.vo.PostPageVO;
 import com.campushub.post.vo.PostVO;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StopWatch;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 /** 帖子基础业务实现。 */
 @Slf4j
@@ -35,11 +39,30 @@ public class PostServiceImpl implements PostService {
 
     private final StringUtils stringUtils;
 
+    private final RedisService redisService;
+
+    private final ObjectMapper objectMapper;
+
     /** 游标分页默认页大小。 */
     private static final int DEFAULT_PAGE_SIZE = 20;
 
     /** 游标分页最大页大小。 */
     private static final int MAX_PAGE_SIZE = 100;
+
+    /** 帖子详情缓存键前缀，完整键为 campushub:post:info:{postId}。 */
+    private static final String CACHE_KEY_PREFIX = "campushub:post:info:";
+
+    /** 浏览增量聚合 Hash 键，field 为帖子 ID，value 为未落库的浏览增量。 */
+    private static final String VIEW_DELTA_KEY = "campushub:post:view:delta";
+
+    /** 详情缓存基础 TTL 秒数，保证任何脏数据到期必死、下次回源必然新鲜。 */
+    private static final long CACHE_TTL_SECONDS = 300;
+
+    /** 详情缓存 TTL 随机抖动上限秒数，防止大批键同时过期集体回源。 */
+    private static final long CACHE_TTL_JITTER_SECONDS = 120;
+
+    /** 空值占位 TTL 秒数，刻意设置较短以缩小"帖子刚创建即被误判不存在"的窗口。 */
+    private static final long NULL_CACHE_TTL_SECONDS = 60;
 
     /** 直接插入创建当前登录用户的帖子，幂等由数据库唯一键保证；重复提交时返回已存在的原帖子。 */
     @Override
@@ -56,6 +79,8 @@ public class PostServiceImpl implements PostService {
         post.setPostIsDelete(0);
         try {
             postMapper.insert(post);
+            // 新帖落地即清除可能残留的空值占位，保证立即可查
+            evictCache(post.getPostId());
         } catch (DuplicateKeyException exception) {
             // 唯一键冲突说明同一幂等键已插入成功，直接返回已存在的帖子；查不到说明命中的是已软删除的帖子
             Post existingPost = postMapper.selectOne(Wrappers.<Post>lambdaQuery()
@@ -70,33 +95,35 @@ public class PostServiceImpl implements PostService {
         return getById(post.getPostId());
     }
 
-    /** 查询未删除帖子；帖子不存在时返回 404 业务异常。 */
+    /** 查询未删除帖子，走详情缓存单键三分支读取；帖子不存在时返回 404 业务异常。 */
     @Override
     public PostVO getById(Long postId) {
-        // 记录按主键查询任务的耗时
-        StopWatch stopWatch = new StopWatch();
-        stopWatch.start("postMapper.selectById");
-        Post post = findPost(postId);
-        stopWatch.stop();
-        log.info("按 ID 查询帖子任务耗时 {} ms", stopWatch.getTotalTimeMillis());
-        return toPostVO(post);
+        return getCachedPost(postId);
     }
 
-    /** 浏览帖子：返回帖子详情并将浏览量原子加一，落库计数由数据库自增保证并发下不丢失。 */
+    /**
+     * 功能：浏览帖子，优先读取详情缓存并将浏览增量记入 Redis 聚合 Hash。
+     *
+     * <p>详情读取为单键三分支：命中 JSON 直接返回；空串占位说明该 ID 已验证不存在，
+     * 直接拒绝以挡住穿透请求；未命中才回源数据库并写回缓存。浏览增量通过一条
+     * HINCRBY 记账，field 不存在时自动从 0 累加，落库由后续定时任务折叠处理。
+     *
+     * @param postId 帖子主键，不允许为空
+     * @return 帖子详情，浏览量为缓存快照，允许短暂滞后于真实累计值
+     * @throws BusinessException 帖子 ID 为空时抛 400，帖子不存在时抛 404
+     */
     @Override
     public PostVO view(Long postId) {
-        Post post = findPost(postId);
-
-        // 记录浏览量自增任务的耗时
-        StopWatch stopWatch = new StopWatch();
-        stopWatch.start("postMapper.increaseViewNumber");
-        postMapper.increaseViewNumber(post.getPostId());
-        stopWatch.stop();
-        log.info("帖子浏览量自增任务耗时 {} ms", stopWatch.getTotalTimeMillis());
-
-        // 返回的浏览量为读取值加一；并发浏览时展示值可能略有滞后，但落库计数不会丢失
-        post.setPostViewNumber(post.getPostViewNumber() + 1);
-        return toPostVO(post);
+        // 详情复用 getById 的缓存读取，MySQL 全程无感知（命中时）
+        PostVO postVO = getById(postId);
+        // 浏览增量记账：替代原先每次浏览的数据库 UPDATE；当前未启用定时落库，增量暂存于 Hash
+        try {
+            redisService.hIncrBy(VIEW_DELTA_KEY, String.valueOf(postId), 1L);
+        } catch (Exception exception) {
+            // Redis 异常时增量无法记账，按最多一次语义放弃本次计数，不影响详情返回
+            log.warn("浏览增量记账失败，postId={}", postId, exception);
+        }
+        return postVO;
     }
 
     /** 按条件游标分页查询帖子，返回本页数据和下一页游标，默认按创建时间倒序。 */
@@ -142,6 +169,8 @@ public class PostServiceImpl implements PostService {
         post.setPostType(normalizePostType(request.postType(), true));
         post.setPostText(request.postText());
         postMapper.updateById(post);
+        // 写路径采用先改库再删缓存：删除幂等，最坏代价只是下一位读者多一次回源
+        evictCache(postId);
         return getById(postId);
     }
 
@@ -150,6 +179,8 @@ public class PostServiceImpl implements PostService {
     public void delete(Long postId) {
         Post post = requireOwnedPost(postId);
         postMapper.deleteById(post.getPostId());
+        // 删除帖子后同步清除缓存，避免已删内容在缓存存活期内继续可见
+        evictCache(postId);
     }
 
     /** 校验帖子存在且属于当前登录用户，否则抛出对应业务异常。 */
@@ -172,6 +203,87 @@ public class PostServiceImpl implements PostService {
             throw new BusinessException(ErrorCode.NOT_FOUND, "帖子不存在");
         }
         return post;
+    }
+
+    /**
+     * 功能：按单键三分支读取帖子详情缓存，未命中时回源数据库并写回。
+     *
+     * <p>缓存键 campushub:post:info:{postId} 的值存在三种形态：JSON 表示存在且命中；
+     * 空串表示已验证不存在（空值缓存，60 秒内重复请求不再穿透数据库）；null 表示
+     * 尚未查询过，需回源。回源命中时以 300 秒加随机抖动的 TTL 写回，命中读永不续期，
+     * 保证脏数据到期必死；回源未命中时写入空串占位。
+     *
+     * @param postId 帖子主键，不允许为空
+     * @return 帖子详情
+     * @throws BusinessException 帖子 ID 为空时抛 400，数据库中也不存在时抛 404
+     */
+    private PostVO getCachedPost(Long postId) {
+        if (postId == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "帖子 ID 不能为空");
+        }
+        String cacheKey = CACHE_KEY_PREFIX + postId;
+        String cached = null;
+        try {
+            cached = redisService.get(cacheKey);
+        } catch (Exception exception) {
+            // Redis 异常一律降级为回源数据库，缓存故障不能影响详情接口可用性
+            log.warn("帖子缓存读取失败，降级回源数据库，postId={}", postId, exception);
+        }
+        if (cached != null) {
+            // 空串占位：该 ID 已被验证不存在，直接拒绝
+            if (cached.isEmpty()) {
+                throw new BusinessException(ErrorCode.NOT_FOUND, "帖子不存在");
+            }
+            try {
+                return objectMapper.readValue(cached, PostVO.class);
+            } catch (Exception exception) {
+                // 反序列化失败说明缓存内容损坏，删除毒 key 后按未命中回源重写；删除失败不阻断回源
+                log.warn("帖子缓存反序列化失败，删除毒 key 后回源，postId={}", postId, exception);
+                try {
+                    redisService.delete(cacheKey);
+                } catch (Exception deleteException) {
+                    // 删除失败时毒 key 残留，由 TTL 到期自愈，本次仍走回源保证接口可用
+                    log.warn("毒 key 删除失败，等待 TTL 自愈，postId={}", postId, deleteException);
+                }
+            }
+        }
+        Post post = postMapper.selectById(postId);
+        if (post == null) {
+            writeNullCache(cacheKey);
+            throw new BusinessException(ErrorCode.NOT_FOUND, "帖子不存在");
+        }
+        PostVO postVO = toPostVO(post);
+        writeCache(cacheKey, postVO);
+        return postVO;
+    }
+
+    /** 将帖子详情写入缓存，TTL 为 300 秒加随机抖动，命中读永不续期；写失败仅记录日志。 */
+    private void writeCache(String cacheKey, PostVO postVO) {
+        try {
+            String json = objectMapper.writeValueAsString(postVO);
+            long ttl = CACHE_TTL_SECONDS + ThreadLocalRandom.current().nextLong(CACHE_TTL_JITTER_SECONDS + 1);
+            redisService.set(cacheKey, json, Duration.ofSeconds(ttl));
+        } catch (Exception exception) {
+            log.warn("帖子详情缓存写入失败，cacheKey={}", cacheKey, exception);
+        }
+    }
+
+    /** 写入空值占位并设置较短 TTL，声明过期越快，帖子创建后的误判窗口越小。 */
+    private void writeNullCache(String cacheKey) {
+        try {
+            redisService.set(cacheKey, "", Duration.ofSeconds(NULL_CACHE_TTL_SECONDS));
+        } catch (Exception exception) {
+            log.warn("空值占位写入失败，cacheKey={}", cacheKey, exception);
+        }
+    }
+
+    /** 删除帖子详情缓存，删除幂等；失败仅记录日志，残留数据由 TTL 到期自愈。 */
+    private void evictCache(Long postId) {
+        try {
+            redisService.delete(CACHE_KEY_PREFIX + postId);
+        } catch (Exception exception) {
+            log.warn("帖子详情缓存删除失败，postId={}", postId, exception);
+        }
     }
 
     /** 获取当前登录用户 ID，登录状态失效时抛出 401 业务异常。 */
