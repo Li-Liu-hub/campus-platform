@@ -13,6 +13,9 @@
 # Tomcat 访问日志挂载目录
 tomcat-logs/
 
-# JMeter 压测原始结果（结论已沉淀到 docs，仓库只保留脚本与计划）
-JMeterTest/results/
+# JMeter 压测原始结果（结论沉淀在 results/*/notes.md，仓库只保留实验文档与 jmx 脚本）
+JMeterTest/**/*.jtl
+JMeterTest/results/**/counters/
+JMeterTest/**/ids-*.txt
+JMeterTest/cold-read-ids.txt
 JMeterTest/*.jar
