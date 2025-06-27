@@ -13,6 +13,18 @@ spring:
       database: ${REDIS_DATABASE:0}
       timeout: 3s
       connect-timeout: 3s
+      lettuce:
+        pool:
+          # 最大连接数：并发上限，压测出现借取超时时优先调大
+          max-active: 192
+          # 空闲上限：压测结束后归还多余连接
+          max-idle: 64
+          # 保底空闲：避免冷启动时瞬时建连
+          min-idle: 4
+          # 借不到连接最多等 100ms，快速失败不在线程上堆积
+          max-wait: 100ms
+          # 空闲连接逐出检查周期
+          time-between-eviction-runs: 30s
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
