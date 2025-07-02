@@ -42,6 +42,27 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!-- 操作日志切面依赖：AspectJ 注解拦截与请求上下文读取 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <!-- 引入但暂未使用：后续实现布隆过滤器等功能时手动创建 RedissonClient -->
         <dependency>
             <groupId>org.redisson</groupId>

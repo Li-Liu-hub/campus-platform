@@ -1,6 +1,5 @@
 package com.campushub.system.entity;
 
-import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -42,11 +41,14 @@ public class Log {
     @TableField("log_text")
     private String logText;
 
-    /** 创建时间由数据库维护，新增和更新 SQL 均不写入该字段。 */
-    @TableField(value = "create_time", insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    /**
+     * 创建时间：消费端路径写入事件携带的操作发生时刻，HTTP 管理端路径留空，
+     * 由数据库 DEFAULT CURRENT_TIMESTAMP 填充。
+     */
+    @TableField("create_time")
     private LocalDateTime createTime;
 
-    /** 更新时间由数据库维护，新增和更新 SQL 均不写入该字段。 */
-    @TableField(value = "update_time", insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
-    private LocalDateTime updateTime;
+    /** 日志耗时（毫秒）。 */
+    @TableField("log_cost_time")
+    private Long logCostTime;
 }

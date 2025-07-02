@@ -12,6 +12,6 @@ public record LogVO(
         Integer logStatus,
         String logText,
         LocalDateTime createTime,
-        LocalDateTime updateTime
+        Long logCostTime
 ) {
 }

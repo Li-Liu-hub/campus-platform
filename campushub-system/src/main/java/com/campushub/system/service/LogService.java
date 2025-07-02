@@ -1,5 +1,6 @@
 package com.campushub.system.service;
 
+import com.campushub.common.log.LogEvent;
 import com.campushub.system.dto.LogCreateRequest;
 import com.campushub.system.dto.LogUpdateRequest;
 import com.campushub.system.vo.LogVO;
@@ -18,4 +19,11 @@ public interface LogService {
 
     /** 删除日志。 */
     void delete(Long logId);
+
+    /**
+     * 功能：写入消费端异步落库的操作日志事件。
+     *
+     * @param event 操作日志事件，来自消息队列反序列化，create_time 使用事件携带的操作时刻
+     */
+    void insert(LogEvent event);
 }

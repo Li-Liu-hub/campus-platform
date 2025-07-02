@@ -3,6 +3,8 @@ package com.campushub.post.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.campushub.common.exception.BusinessException;
 import com.campushub.common.exception.ErrorCode;
+import com.campushub.common.log.OperationLog;
+import com.campushub.common.log.OperationTypes;
 import com.campushub.common.util.StringUtils;
 import com.campushub.infrastructure.redis.RedisService;
 import com.campushub.infrastructure.security.AuthenticationService;
@@ -161,7 +163,8 @@ public class PostServiceImpl implements PostService {
         return Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
     }
 
-    /** 修改当前登录用户创建的帖子，不更新创建时间和更新时间字段。 */
+    /** 修改当前登录用户创建的帖子，不更新创建时间和更新时间字段；操作留痕由日志切面异步完成。 */
+    @OperationLog(type = OperationTypes.POST_UPDATE, targetId = "#args[0]")
     @Override
     public PostVO update(Long postId, PostUpdateRequest request) {
         Post post = requireOwnedPost(postId);

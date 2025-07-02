@@ -26,6 +26,9 @@ public record LogUpdateRequest(
         Integer logStatus,
 
         @Size(max = 65535, message = "日志说明长度不能超过 65535 个字符")
-        String logText
+        String logText,
+
+        @Min(value = 0, message = "日志耗时不能为负数")
+        Long logCostTime
 ) {
 }

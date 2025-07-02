@@ -31,6 +31,17 @@ spring:
     username: ${RABBITMQ_USERNAME:root}
     password: ${RABBITMQ_PASSWORD:123456}
     virtual-host: ${RABBITMQ_VHOST:/}
+    listener:
+      simple:
+        # AUTO 确认：方法正常返回自动 ACK，抛出异常自动 NACK 进入本地重试
+        acknowledge-mode: auto
+        # 本地重试耗尽后拒绝且不重回队列，经死信路由进入 DLQ 人工处理
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
 
 server:
   tomcat:
