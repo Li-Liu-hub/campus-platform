@@ -1,7 +1,7 @@
 package com.campushub.system.consumer;
 
 import com.campushub.common.log.LogEvent;
-import com.campushub.infrastructure.mq.RabbitMqConfig;
+import com.campushub.common.mq.MqConstants;
 import com.campushub.system.service.LogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -25,7 +25,7 @@ public class LogConsumer {
      * @param event 操作日志事件，容器按 JSON 反序列化
      * @throws Exception 落库失败时抛出，触发容器本地重试与死信兜底
      */
-    @RabbitListener(queues = RabbitMqConfig.LOG_QUEUE)
+    @RabbitListener(queues = MqConstants.LOG_QUEUE)
     public void onLogEvent(LogEvent event) {
         logService.insert(event);
     }

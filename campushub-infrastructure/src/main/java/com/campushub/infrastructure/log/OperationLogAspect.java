@@ -2,8 +2,8 @@ package com.campushub.infrastructure.log;
 
 import com.campushub.common.log.LogEvent;
 import com.campushub.common.log.OperationLog;
+import com.campushub.common.mq.MqConstants;
 import com.campushub.infrastructure.mq.MessagePublisher;
-import com.campushub.infrastructure.mq.RabbitMqConfig;
 import com.campushub.infrastructure.security.AuthenticationService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -81,16 +81,19 @@ public class OperationLogAspect {
     private void publish(OperationLog operationLog, Object[] args, boolean success, String text, long start) {
         try {
             long costTime = (System.nanoTime() - start) / 1_000_000;
+            Long targetId = resolveTargetId(operationLog.targetId(), args);
             LogEvent event = new LogEvent(
                     operationLog.type(),
-                    resolveTargetId(operationLog.targetId(), args),
+                    targetId,
                     authenticationService.getCurrentUserId(),
                     resolveClientIp(),
                     success,
                     truncate(text),
                     costTime,
                     System.currentTimeMillis());
-            messagePublisher.publish(RabbitMqConfig.LOG_EXCHANGE, RabbitMqConfig.LOG_ROUTING_KEY, event);
+            // 业务标识随 CorrelationData 发送，confirm 回执 nack 时凭它定位丢失的业务事件
+            messagePublisher.publish(MqConstants.LOG_EXCHANGE, MqConstants.LOG_ROUTING_KEY, event,
+                    "oplog:" + operationLog.type() + ":" + targetId);
         } catch (Exception exception) {
             // 日志链路故障不反噬业务：会话读取、SpEL 求值、消息发布任一失败仅记录本地日志
             log.error("操作日志发布失败，type={}", operationLog.type(), exception);

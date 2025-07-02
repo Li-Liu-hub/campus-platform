@@ -29,9 +29,9 @@ public class Log {
     @TableField("log_type")
     private String logType;
 
-    /** 创建或修改的数据表主键，非表数据操作允许为空。 */
-    @TableField("log_table_id")
-    private Long logTableId;
+    /** 操作目标数据主键，非表数据操作允许为空。 */
+    @TableField("log_target_id")
+    private Long logTargetId;
 
     /** 操作状态：1 表示成功，0 表示失败。 */
     @TableField("log_status")

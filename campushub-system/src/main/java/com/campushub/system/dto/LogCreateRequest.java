@@ -18,7 +18,7 @@ public record LogCreateRequest(
         @Size(max = 32, message = "操作类型长度不能超过 32 个字符")
         String logType,
 
-        Long logTableId,
+        Long logTargetId,
 
         @NotNull(message = "操作状态不能为空")
         @Min(value = 0, message = "操作状态只能为 0 或 1")

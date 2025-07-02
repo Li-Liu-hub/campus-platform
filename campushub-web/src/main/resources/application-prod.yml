@@ -19,6 +19,13 @@ spring:
     username: ${RABBITMQ_USERNAME:root}
     password: ${RABBITMQ_PASSWORD:123456}
     virtual-host: ${RABBITMQ_VHOST:/}
+    # 生产者确认（correlated）：broker 收到并持久化消息后异步回执，nack 时回调记录业务标识
+    publisher-confirm-type: correlated
+    # 路由不到任何队列时退回消息，触发 ReturnsCallback（几乎必然是配置错误，报警级别）
+    publisher-returns: true
+    # 退回的前提：路由失败的消息不静默丢弃而是交还生产者
+    template:
+      mandatory: true
     listener:
       simple:
         # AUTO 确认：方法正常返回自动 ACK，抛出异常自动 NACK 进入本地重试

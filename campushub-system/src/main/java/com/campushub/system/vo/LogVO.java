@@ -8,7 +8,7 @@ public record LogVO(
         Long logUserId,
         String logUserIp,
         String logType,
-        Long logTableId,
+        Long logTargetId,
         Integer logStatus,
         String logText,
         LocalDateTime createTime,

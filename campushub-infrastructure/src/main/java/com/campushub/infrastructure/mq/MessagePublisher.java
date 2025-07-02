@@ -4,11 +4,24 @@ package com.campushub.infrastructure.mq;
 public interface MessagePublisher {
 
     /**
-     * 功能：将消息以 JSON 格式发送到指定交换机。
+     * 功能：将消息以 JSON 格式发送到指定交换机，业务标识自动生成。
      *
      * @param exchange 目标交换机名称
      * @param routingKey 路由键，由交换机类型和队列绑定关系决定消息去向
      * @param message 消息内容，任意可 JSON 序列化的对象，推荐使用 record
      */
     void publish(String exchange, String routingKey, Object message);
+
+    /**
+     * 功能：将消息以 JSON 格式发送到指定交换机，并携带业务标识。
+     *
+     * <p>业务标识随 CorrelationData 传递，confirm 回执 nack 时凭它定位是哪条业务消息
+     * 未被 broker 确认，供人工排查。
+     *
+     * @param exchange 目标交换机名称
+     * @param routingKey 路由键，由交换机类型和队列绑定关系决定消息去向
+     * @param message 消息内容，任意可 JSON 序列化的对象，推荐使用 record
+     * @param bizId 业务标识，如 "oplog:POST_UPDATE:123"，用于 confirm 失败后的定位
+     */
+    void publish(String exchange, String routingKey, Object message, String bizId);
 }
