@@ -39,6 +39,9 @@ public final class MqConstants {
     /** 缓存删除的死信改写键，延迟双删链路预留，功能落地时启用。 */
     public static final String CACHE_DELETE_ROUTING = "campushub.cache.delete";
 
+    /** 发件箱消息的 correlationId 前缀，confirm 回调凭该前缀识别 outbox 消息并标记已确认。 */
+    public static final String OUTBOX_CORRELATION_PREFIX = "outbox:";
+
     /** 私有构造，防止实例化常量类。 */
     private MqConstants() {
     }

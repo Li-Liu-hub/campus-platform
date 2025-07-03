@@ -1,6 +1,7 @@
 package com.campushub.infrastructure.mq;
 
 import com.campushub.common.mq.MqConstants;
+import com.campushub.infrastructure.mq.outbox.OutboxService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,11 +33,15 @@ public class RabbitMqConfig {
 
     private final RabbitTemplate rabbitTemplate;
 
+    private final OutboxService outboxService;
+
     /**
      * 功能：注册生产者确认与消息退回回调。
      *
-     * <p>ConfirmCallback：broker 收到消息并持久化后异步回执。ack=true 一切正常不处理；
-     * ack=false 表示 broker 未收到消息，记 error 日志（correlationData 携带业务标识）供人工排查。
+     * <p>ConfirmCallback：broker 收到消息并持久化后异步回执。ack=true 时日志类消息不做任何事；
+     * 发件箱消息（correlationId 带 outbox: 前缀）标记已确认，等待保留期清理。
+     * ack=false 表示 broker 未收到消息，记 error 日志（correlationData 携带业务标识）供人工排查；
+     * 发件箱消息保持待确认状态由轮询中继自动重发。
      * confirm 是事后知晓不是同步保障，publish 瞬间即返回，真实语义是"尽力发送 + 事后可观测"。
      *
      * <p>ReturnsCallback：消息到达 broker 但路由不到任何队列时退回——几乎必然意味着
@@ -45,15 +50,31 @@ public class RabbitMqConfig {
     @PostConstruct
     public void initPublisherCallbacks() {
         rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
-            if (!ack) {
-                log.error("消息未被 broker 确认，correlationId={}，cause={}",
-                        correlationData == null ? "unknown" : correlationData.getId(), cause);
+            if (ack) {
+                markOutboxConfirmed(correlationData);
+                return;
             }
+            log.error("消息未被 broker 确认，correlationId={}，cause={}",
+                    correlationData == null ? "unknown" : correlationData.getId(), cause);
         });
         rabbitTemplate.setReturnsCallback(returned -> log.error(
                 "消息路由失败被退回，exchange={}，routingKey={}，replyCode={}，replyText={}，body={}",
                 returned.getExchange(), returned.getRoutingKey(), returned.getReplyCode(),
                 returned.getReplyText(), new String(returned.getMessage().getBody(), StandardCharsets.UTF_8)));
+    }
+
+    /** 发件箱消息 confirm 后标记已确认，非发件箱消息不做任何处理。 */
+    private void markOutboxConfirmed(CorrelationData correlationData) {
+        if (correlationData == null || correlationData.getId() == null
+                || !correlationData.getId().startsWith(MqConstants.OUTBOX_CORRELATION_PREFIX)) {
+            return;
+        }
+        try {
+            outboxService.markConfirmed(Long.parseLong(
+                    correlationData.getId().substring(MqConstants.OUTBOX_CORRELATION_PREFIX.length())));
+        } catch (Exception exception) {
+            log.error("发件箱确认标记失败，correlationId={}", correlationData.getId(), exception);
+        }
     }
 
     /**
