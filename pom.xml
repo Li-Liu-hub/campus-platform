@@ -32,6 +32,7 @@
         <module>campushub-user</module>
         <module>campushub-admin</module>
         <module>campushub-post</module>
+        <module>campushub-order</module>
         <module>campushub-web</module>
     </modules>
 
@@ -65,6 +66,11 @@
             <dependency>
                 <groupId>com.campushub</groupId>
                 <artifactId>campushub-post</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.campushub</groupId>
+                <artifactId>campushub-order</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
