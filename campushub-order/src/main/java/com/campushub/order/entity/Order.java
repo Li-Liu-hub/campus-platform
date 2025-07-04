@@ -20,23 +20,39 @@ public class Order {
     @TableId(value = "order_id", type = IdType.ASSIGN_ID)
     private Long orderId;
 
-    /** 下单用户主键。 */
-    @TableField("order_user_id")
-    private Long orderUserId;
+    /** 发布订单的用户 ID。 */
+    @TableField("order_sent_user_id")
+    private Long orderSentUserId;
 
-    /** 订单标题。 */
-    @TableField("order_title")
-    private String orderTitle;
+    /** 接单用户 ID，抢单成功后回填，待接单时为空。 */
+    @TableField("order_receive_user_id")
+    private Long orderReceiveUserId;
+
+    /** 防止同一请求重复创建订单的幂等键。 */
+    @TableField("order_idempotency_key")
+    private String orderIdempotencyKey;
 
     /** 订单金额，保留两位小数。 */
     @TableField("order_amount")
     private BigDecimal orderAmount;
 
-    /** 订单状态：0 待支付，1 已支付，2 已完成，3 已取消。 */
+    /** 订单状态，取值见 OrderStatuses 常量。 */
     @TableField("order_status")
     private Integer orderStatus;
 
-    /** 软删除标识：0 未删除，1 已删除。 */
+    /** 订单最晚支付时间，超时未支付可被取消。 */
+    @TableField("order_timeout")
+    private LocalDateTime orderTimeout;
+
+    /** 订单类型。 */
+    @TableField("order_type")
+    private String orderType;
+
+    /** 订单浏览量。 */
+    @TableField("order_view_number")
+    private Long orderViewNumber;
+
+    /** 软删除标识：0 表示未删除，1 表示已删除。 */
     @TableLogic(value = "0", delval = "1")
     @TableField("order_is_delete")
     private Integer orderIsDelete;

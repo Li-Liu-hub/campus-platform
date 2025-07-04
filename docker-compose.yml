@@ -35,7 +35,8 @@ services:
       - campushub-mysql-data:/var/lib/mysql
 
   redis:
-    image: redis:7-alpine
+    # HSETEX/HGETDEL（哈希字段级原子操作）自 Redis 8.0 起提供，抢单分布式锁依赖
+    image: redis:8-alpine
     container_name: campushub-redis
     ports:
       - "127.0.0.1:6380:6379"

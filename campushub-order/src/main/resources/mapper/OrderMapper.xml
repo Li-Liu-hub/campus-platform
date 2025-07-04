@@ -5,42 +5,49 @@
 <mapper namespace="com.campushub.order.mapper.OrderMapper">
 
     <select id="selectByCondition" resultType="com.campushub.order.entity.Order">
-        <!-- 单表查询，刻意不做 JOIN：分页扫描路径上任何 JOIN 都会让优化器放弃索引序（帖子模块百万行实验结论） -->
-        SELECT
-        o.order_id,
-        o.order_user_id,
-        o.order_title,
-        o.order_amount,
-        o.order_status,
-        o.create_time,
-        o.update_time
-        FROM ch_order o
-        WHERE o.order_is_delete = 0
-        <if test="orderStatus != null">
-            AND o.order_status = #{orderStatus}
-        </if>
-        <if test="cursorTime != null and cursorId != null">
-            <!-- 游标：从上一页末行的 (create_time, order_id) 接着往下找，已读数据不再经过 -->
-            <choose>
-                <when test="orderByAsc">
-                    AND (o.create_time &gt; #{cursorTime}
-                    OR (o.create_time = #{cursorTime} AND o.order_id &gt; #{cursorId}))
-                </when>
-                <otherwise>
-                    AND (o.create_time &lt; #{cursorTime}
-                    OR (o.create_time = #{cursorTime} AND o.order_id &lt; #{cursorId}))
-                </otherwise>
-            </choose>
-        </if>
+        SELECT order_id,
+               order_sent_user_id,
+               order_receive_user_id,
+               order_type,
+               order_amount,
+               order_status,
+               order_timeout,
+               order_view_number,
+               create_time,
+               update_time
+        FROM ch_order
+        WHERE order_is_delete = 0
         <choose>
-            <when test="orderByAsc">
-                ORDER BY o.create_time ASC, o.order_id ASC
+            <when test="role == 'received'">
+                AND order_receive_user_id = #{userId}
             </when>
             <otherwise>
-                ORDER BY o.create_time DESC, o.order_id DESC
+                AND order_sent_user_id = #{userId}
             </otherwise>
         </choose>
+        <if test="orderStatus != null">
+            AND order_status = #{orderStatus}
+        </if>
+        ORDER BY create_time DESC, order_id DESC
         LIMIT #{pageSize}
     </select>
+
+    <update id="casGrab">
+        <!-- 抢单兜底：条件更新以状态为乐观条件，数据库行锁保证并发下仅一人更新成功 -->
+        UPDATE ch_order
+        SET order_status         = 1,
+            order_receive_user_id = #{receiveUserId}
+        WHERE order_id = #{orderId}
+          AND order_is_delete = 0
+          AND order_status = 0
+    </update>
+
+    <update id="increaseViewNumber">
+        <!-- 浏览量原子自增：由数据库单条 UPDATE 保证并发下不丢计数 -->
+        UPDATE ch_order
+        SET order_view_number = order_view_number + 1
+        WHERE order_id = #{orderId}
+          AND order_is_delete = 0
+    </update>
 
 </mapper>
