@@ -39,6 +39,17 @@ public interface RedisService {
     /** 向哈希指定字段累加数值增量并返回累加结果，字段不存在时从 0 开始。 */
     Long hIncrBy(String key, String field, long delta);
 
+    /**
+     * 原子读取并删除哈希指定字段（HGETDEL 语义），适用于聚合增量刷库场景。
+     *
+     * <p>服务端 Redis 7.4 起提供原生 HGETDEL，客户端 API 未暴露前以等价 Lua
+     * （HGET + HDEL，同脚本原子执行）实现，读取与删除之间不会插入其他命令。
+     */
+    String hGetDel(String key, String field);
+
+    /** 扫描哈希全部字段名并完整返回，内部按游标分批遍历，超大批量哈希慎用。 */
+    java.util.Set<String> hScanFields(String key, long count);
+
     /** 向有序集合写入成员及分数，成员已存在时更新分数。 */
     Boolean zAdd(String key, String member, double score);
 

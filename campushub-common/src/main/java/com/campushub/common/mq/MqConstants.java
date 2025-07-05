@@ -39,6 +39,24 @@ public final class MqConstants {
     /** 缓存删除的死信改写键，延迟双删链路预留，功能落地时启用。 */
     public static final String CACHE_DELETE_ROUTING = "campushub.cache.delete";
 
+    /** 帖子域交换机（topic），承载点赞/收藏等帖子域事件。 */
+    public static final String POST_EXCHANGE = "campushub.post";
+
+    /** 帖子互动事件路由键，四种动作（点赞/取消/收藏/取消收藏）共用一条队列，消费者按事件类型分发。 */
+    public static final String POST_INTERACTION_ROUTING = "campushub.post.interaction";
+
+    /** 帖子互动事件队列，持久化，消息 TTL 兜底。 */
+    public static final String POST_INTERACTION_QUEUE = "campushub.post.interaction.queue";
+
+    /** 帖子互动死信交换机，接收超时或被拒绝的消息。 */
+    public static final String POST_INTERACTION_DLX = "campushub.post.interaction.dlq";
+
+    /** 帖子互动死信路由键。 */
+    public static final String POST_INTERACTION_DEAD_ROUTING = "campushub.post.interaction.dead";
+
+    /** 帖子互动死信队列，积压消息人工处理。 */
+    public static final String POST_INTERACTION_DLQ = "campushub.post.interaction.dlq.queue";
+
     /** 发件箱消息的 correlationId 前缀，confirm 回调凭该前缀识别 outbox 消息并标记已确认。 */
     public static final String OUTBOX_CORRELATION_PREFIX = "outbox:";
 

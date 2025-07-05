@@ -9,6 +9,7 @@ import com.campushub.common.util.StringUtils;
 import com.campushub.infrastructure.redis.RedisService;
 import com.campushub.infrastructure.security.AuthenticationService;
 import com.campushub.post.constant.PostCategories;
+import com.campushub.post.constant.PostRedisKeys;
 import com.campushub.post.dto.PostCreateRequest;
 import com.campushub.post.dto.PostQueryRequest;
 import com.campushub.post.dto.PostUpdateRequest;
@@ -54,8 +55,8 @@ public class PostServiceImpl implements PostService {
     /** 帖子详情缓存键前缀，完整键为 campushub:post:info:{postId}。 */
     private static final String CACHE_KEY_PREFIX = "campushub:post:info:";
 
-    /** 浏览增量聚合 Hash 键，field 为帖子 ID，value 为未落库的浏览增量。 */
-    private static final String VIEW_DELTA_KEY = "campushub:post:view:delta";
+    /** 浏览增量聚合 Hash 键，field 为帖子 ID，value 为未落库的浏览增量；刷库任务共用该定义。 */
+    private static final String VIEW_DELTA_KEY = PostRedisKeys.VIEW_DELTA_KEY;
 
     /** 详情缓存基础 TTL 秒数，保证任何脏数据到期必死、下次回源必然新鲜。 */
     private static final long CACHE_TTL_SECONDS = 300;

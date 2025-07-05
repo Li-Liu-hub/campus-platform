@@ -32,4 +32,13 @@ public interface PostMapper extends BaseMapper<Post> {
 
     /** 将指定未删除帖子的浏览量原子加一，并发下不会丢失计数。 */
     void increaseViewNumber(@Param("postId") Long postId);
+
+    /**
+     * 功能：将指定帖子的浏览量原子增加指定增量，供定时刷库任务批量折叠使用。
+     *
+     * @param postId 帖子主键
+     * @param delta 浏览增量，大于 0
+     * @return 受影响行数，0 表示帖子已不存在
+     */
+    int increaseViewNumberBy(@Param("postId") Long postId, @Param("delta") long delta);
 }

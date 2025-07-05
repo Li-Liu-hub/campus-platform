@@ -59,4 +59,11 @@
           AND post_is_delete = 0
     </update>
 
+    <update id="increaseViewNumberBy">
+        <!-- 定时刷库任务批量折叠：按 Redis 聚合增量一次性累加，不加软删除条件以免增量丢失 -->
+        UPDATE ch_post
+        SET post_view_number = post_view_number + #{delta}
+        WHERE post_id = #{postId}
+    </update>
+
 </mapper>
