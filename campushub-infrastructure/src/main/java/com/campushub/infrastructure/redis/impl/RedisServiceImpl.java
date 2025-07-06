@@ -40,6 +40,12 @@ public class RedisServiceImpl implements RedisService {
         return stringRedisTemplate.opsForValue().get(key);
     }
 
+    /** 批量读取多个字符串键，一次网络往返取回全部值。 */
+    @Override
+    public List<String> multiGet(List<String> keys) {
+        return stringRedisTemplate.opsForValue().multiGet(keys);
+    }
+
     /** 删除键。 */
     @Override
     public Boolean delete(String key) {
@@ -122,6 +128,16 @@ public class RedisServiceImpl implements RedisService {
     @Override
     public Long zRemove(String key, String member) {
         return stringRedisTemplate.opsForZSet().remove(key, member);
+    }
+
+    /** 计算多个有序集合的并集存入目标键，权重 1、分数求和。 */
+    @Override
+    public Long zUnionStore(String destKey, List<String> keys) {
+        if (keys == null || keys.isEmpty()) {
+            return 0L;
+        }
+        return stringRedisTemplate.opsForZSet()
+                .unionAndStore(keys.get(0), keys.subList(1, keys.size()), destKey);
     }
 
     /** 向集合添加成员。 */

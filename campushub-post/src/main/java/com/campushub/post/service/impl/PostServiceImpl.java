@@ -52,8 +52,8 @@ public class PostServiceImpl implements PostService {
     /** 游标分页最大页大小。 */
     private static final int MAX_PAGE_SIZE = 100;
 
-    /** 帖子详情缓存键前缀，完整键为 campushub:post:info:{postId}。 */
-    private static final String CACHE_KEY_PREFIX = "campushub:post:info:";
+    /** 帖子详情缓存键前缀，完整键为 campushub:post:info:{postId}；榜单组装共用该定义。 */
+    private static final String CACHE_KEY_PREFIX = PostRedisKeys.INFO_KEY_PREFIX;
 
     /** 浏览增量聚合 Hash 键，field 为帖子 ID，value 为未落库的浏览增量；刷库任务共用该定义。 */
     private static final String VIEW_DELTA_KEY = PostRedisKeys.VIEW_DELTA_KEY;

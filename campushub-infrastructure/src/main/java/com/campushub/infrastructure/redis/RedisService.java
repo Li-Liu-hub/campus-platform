@@ -21,6 +21,9 @@ public interface RedisService {
     /** 读取字符串值，键不存在时返回 null。 */
     String get(String key);
 
+    /** 批量读取多个字符串键，返回与 keys 顺序一致的值列表，不存在的键对应位置为 null。 */
+    java.util.List<String> multiGet(java.util.List<String> keys);
+
     /** 删除键，键不存在时返回 false。 */
     Boolean delete(String key);
 
@@ -73,6 +76,14 @@ public interface RedisService {
 
     /** 从有序集合移除成员，返回实际移除数量。 */
     Long zRemove(String key, String member);
+
+    /**
+     * 计算多个有序集合的并集并存入目标键，返回目标键的成员数量。
+     *
+     * <p>所有源键权重为 1，同成员分数聚合方式为求和，用于周榜合成等场景；
+     * 源键全部不存在时目标键会被写成空集合。
+     */
+    Long zUnionStore(String destKey, java.util.List<String> keys);
 
     /** 向集合添加成员，返回本次实际新增数量，成员已存在时返回 0。 */
     Long sAdd(String key, String member);
