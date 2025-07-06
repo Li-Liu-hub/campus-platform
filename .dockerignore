@@ -2,7 +2,8 @@
 .idea
 .codex
 .agents
-**/target
+**/target/**
+!campushub-web/target/campushub-web-0.0.1-SNAPSHOT.jar
 *.iml
 *.log
 *.md

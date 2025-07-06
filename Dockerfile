@@ -1,19 +1,9 @@
-FROM maven:3.9-eclipse-temurin-17 AS builder
-
-WORKDIR /build
-
-# 只复制未被 .dockerignore 排除的项目内容。
-COPY . .
-
-# 使用 BuildKit 持久化 Maven 本地仓库，避免源码更新后重复下载未变化的依赖。
-RUN --mount=type=cache,id=campushub-maven,target=/root/.m2,sharing=locked \
-    mvn -B -Dmaven.test.skip=true package
-
-FROM eclipse-temurin:17-jre
+# 本地打包、Docker 只复制 JAR：避免容器内 Maven 构建的解析与环境问题，详见 docs/优化更新SpringBoot镜像速度.md
+FROM docker.1ms.run/library/eclipse-temurin:21-jre
 
 WORKDIR /app
 
-COPY --from=builder /build/campushub-web/target/campushub-web-0.0.1-SNAPSHOT.jar app.jar
+COPY campushub-web/target/campushub-web-0.0.1-SNAPSHOT.jar app.jar
 
 EXPOSE 8080
 

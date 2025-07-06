@@ -1,5 +1,6 @@
-# IntelliJ IDEA 本机配置
+# IDE 本机配置
 .idea/
+.vscode/
 *.iml
 
 # Maven 构建产物
@@ -13,9 +14,14 @@
 # Tomcat 访问日志挂载目录
 tomcat-logs/
 
-# JMeter 压测原始结果（结论沉淀在 results/*/notes.md，仓库只保留实验文档与 jmx 脚本）
+# JMeter 压测原始结果（结论沉淀在各功能点文件夹的 result md，仓库只保留 jmx 与 md）
 JMeterTest/**/*.jtl
-JMeterTest/results/**/counters/
+JMeterTest/**/counters/
 JMeterTest/**/ids-*.txt
-JMeterTest/cold-read-ids.txt
+JMeterTest/**/*-ids.txt
+JMeterTest/**/tokens-*.txt
+JMeterTest/**/*-half.txt
+JMeterTest/**/seg-*.csv
+JMeterTest/**/*ID.txt
+JMeterTest/**/cold-read-ids.txt
 JMeterTest/*.jar
