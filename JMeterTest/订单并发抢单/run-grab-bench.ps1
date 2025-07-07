@@ -1,7 +1,7 @@
-﻿# 订单并发抢单基准驱动脚本：3 轮，每轮新订单 + 100 线程抢购
+# 订单并发抢单基准驱动脚本：3 轮，每轮新订单 + 100 线程抢购
 # 用法：powershell -File run-grab-bench.ps1
 $ErrorActionPreference = 'Stop'
-$BaseUrl = 'http://localhost:8081'
+$BaseUrl = 'http://localhost:8080'
 $stamp = Get-Date -Format 'yyyyMMddHHmmss'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
@@ -59,7 +59,7 @@ foreach ($round in 1..3) {
         '-j', $jlog,
         "-JorderId=$orderId",
         "-JtokenFile=$tokenFile",
-        '-Jport=8081'
+        '-Jport=8080'
     )
     & jmeter @jmeterArgs 2>&1 | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "jmeter 第 $round 轮执行失败" }

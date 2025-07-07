@@ -1,7 +1,7 @@
-﻿# 订单模块功能测试脚本：CRUD + 幂等 + 分布式锁抢单
+# 订单模块功能测试脚本：CRUD + 幂等 + 分布式锁抢单
 # 用法：powershell -File functional-test.ps1 [-BaseUrl http://localhost:8081]
 param(
-    [string]$BaseUrl = 'http://localhost:8081'
+    [string]$BaseUrl = 'http://localhost:8080'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,9 +31,13 @@ function Invoke-JsonExpectError([string]$Method, [string]$Path, $Body, [string]$
     } catch {
         $response = $_.Exception.Response
         $status = [int]$response.StatusCode
-        $stream = $response.GetResponseStream()
-        $reader = New-Object IO.StreamReader($stream, [Text.Encoding]::UTF8)
-        return @{ status = $status; text = $reader.ReadToEnd() }
+        # pwsh7 抛出的是 HttpResponseMessage，响应体统一从 ErrorDetails 取，5.1 再回退流读取
+        $text = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else {
+            $stream = $response.GetResponseStream()
+            $reader = New-Object IO.StreamReader($stream, [Text.Encoding]::UTF8)
+            $reader.ReadToEnd()
+        }
+        return @{ status = $status; text = $text }
     }
 }
 

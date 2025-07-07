@@ -134,4 +134,48 @@ public class RabbitMqConfig {
     public Binding logDlqBinding() {
         return BindingBuilder.bind(logDlqQueue()).to(logDlxExchange()).with(MqConstants.LOG_DEAD_ROUTING);
     }
+
+    /** 声明帖子域交换机，持久化，topic 类型承载点赞/收藏等帖子域事件。 */
+    @Bean
+    public TopicExchange postExchange() {
+        return new TopicExchange(MqConstants.POST_EXCHANGE, true, false);
+    }
+
+    /**
+     * 声明帖子互动事件队列：durable 保证 broker 重启消息不丢；
+     * 绑定死信交换机与 TTL，超时未消费或消费拒绝的消息统一进入死信队列兜底。
+     */
+    @Bean
+    public Queue postInteractionQueue() {
+        return QueueBuilder.durable(MqConstants.POST_INTERACTION_QUEUE)
+                .deadLetterExchange(MqConstants.POST_INTERACTION_DLX)
+                .deadLetterRoutingKey(MqConstants.POST_INTERACTION_DEAD_ROUTING)
+                .ttl(7 * 24 * 60 * 60 * 1000)
+                .build();
+    }
+
+    /** 将互动队列按互动路由键绑定到帖子域交换机。 */
+    @Bean
+    public Binding postInteractionBinding() {
+        return BindingBuilder.bind(postInteractionQueue()).to(postExchange()).with(MqConstants.POST_INTERACTION_ROUTING);
+    }
+
+    /** 声明帖子互动死信交换机，持久化。 */
+    @Bean
+    public TopicExchange postInteractionDlxExchange() {
+        return new TopicExchange(MqConstants.POST_INTERACTION_DLX, true, false);
+    }
+
+    /** 声明帖子互动死信队列，持久化，由人工消费处理异常互动事件。 */
+    @Bean
+    public Queue postInteractionDlqQueue() {
+        return QueueBuilder.durable(MqConstants.POST_INTERACTION_DLQ).build();
+    }
+
+    /** 将互动死信队列绑定到互动死信交换机。 */
+    @Bean
+    public Binding postInteractionDlqBinding() {
+        return BindingBuilder.bind(postInteractionDlqQueue()).to(postInteractionDlxExchange())
+                .with(MqConstants.POST_INTERACTION_DEAD_ROUTING);
+    }
 }

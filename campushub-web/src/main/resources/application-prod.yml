@@ -1,4 +1,9 @@
 spring:
+  # 调度线程池扩容：默认单线程时，浏览量刷库等长任务会饿死发件箱中继（5s 轮询）
+  task:
+    scheduling:
+      pool:
+        size: 4
   datasource:
     url: ${DB_URL:jdbc:mysql://mysql:3306/campushub?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:root}
