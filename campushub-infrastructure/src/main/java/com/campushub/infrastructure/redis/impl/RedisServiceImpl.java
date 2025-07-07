@@ -13,6 +13,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** 基于 StringRedisTemplate 的 Redis 通用操作实现。 */
@@ -44,6 +45,32 @@ public class RedisServiceImpl implements RedisService {
     @Override
     public List<String> multiGet(List<String> keys) {
         return stringRedisTemplate.opsForValue().multiGet(keys);
+    }
+
+    /** HGETDEL 等价 Lua 脚本：同脚本内读取后删除，整体原子执行，字段不存在返回 nil。 */
+    private static final DefaultRedisScript<String> HGETDEL_SCRIPT = new DefaultRedisScript<>(
+            "local v = redis.call('HGET', KEYS[1], ARGV[1]) "
+                    + "if v then redis.call('HDEL', KEYS[1], ARGV[1]) end "
+                    + "return v",
+            String.class);
+
+    /** 原子读取并删除哈希指定字段。 */
+    @Override
+    public String hGetDel(String key, String field) {
+        return stringRedisTemplate.execute(HGETDEL_SCRIPT, List.of(key), field);
+    }
+
+    /** 扫描哈希全部字段名，游标遍历到完成，扫描期间被删除的字段不会重复出现。 */
+    @Override
+    public Set<String> hScanFields(String key, long count) {
+        Set<String> fields = new HashSet<>();
+        ScanOptions options = ScanOptions.scanOptions().count(count).build();
+        try (Cursor<Map.Entry<Object, Object>> cursor = stringRedisTemplate.opsForHash().scan(key, options)) {
+            while (cursor.hasNext()) {
+                fields.add(String.valueOf(cursor.next().getKey()));
+            }
+        }
+        return fields;
     }
 
     /** 删除键。 */
