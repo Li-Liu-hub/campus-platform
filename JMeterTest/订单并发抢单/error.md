@@ -1,5 +1,32 @@
 # error.md — 订单并发抢单测试踩坑记录
 
+## 2026-09-01 合并后复测（100线程1轮x3轮，终点 68ccffd）
+
+### 9. JTL 同名追加导致统计假象（200 样本/2 个 200）
+
+- **现象**：本轮运行 stdout 为 `summary = 100 ... Err: 99.00%`，但 `Import-Csv`
+  统计 jtl 得到 200 样本、200=2，疑似"两人抢单成功"。
+- **原因**：脚本 `-l grab-r$round.jtl` 写到已存在的旧会话文件，JMeter 非GUI
+  模式对已存在结果文件**追加**而非覆盖，20260901222300 旧样本混入。
+- **解决**：以每次运行 stdout summary 与 DB 差分为准（真实结果 100 样本恰好
+  1 成功）；建议脚本运行前 `Remove-Item grab-r*.jtl`。
+
+### 10. powershell 5.1 解析 UTF-8 无 BOM 脚本报"字符串缺少终结符"
+
+- **现象**：`powershell -File functional-test.ps1` 报 ParserError，中文串显示为
+  GBK 乱码。
+- **原因**：Windows PowerShell 5.1 对无 BOM 文件按 ANSI/GBK 读取，UTF-8 中文
+  破坏字符串边界；且 5.1 的 `HttpResponseMessage` 无 `GetResponseStream`。
+- **解决**：改在 pwsh7 会话直接执行脚本；`Invoke-JsonExpectError` 改用
+  `$_.ErrorDetails.Message` 并保留 5.1 流读取回退。
+
+### 11. 测试脚本端口与容器不一致
+
+- **现象**：脚本默认 `localhost:8081`（历史本地起应用端口），容器部署后应用在
+  8080，脚本全部连接失败。
+- **解决**：run-grab-bench.ps1 的 `$BaseUrl` 与 `-Jport`、functional-test.ps1
+  的默认 `$BaseUrl` 统一改为 8080。
+
 ## 2026-09-01 功能与并发测试过程
 
 ### 1. JMeter CSV（tokens）文件中文路径导致线程 0 样本
