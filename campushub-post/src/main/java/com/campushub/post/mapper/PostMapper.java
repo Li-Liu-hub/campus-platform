@@ -30,15 +30,32 @@ public interface PostMapper extends BaseMapper<Post> {
                                  @Param("cursorId") Long cursorId,
                                  @Param("pageSize") int pageSize);
 
-    /** 将指定未删除帖子的浏览量原子加一，并发下不会丢失计数。 */
-    void increaseViewNumber(@Param("postId") Long postId);
-
     /**
-     * 功能：将指定帖子的浏览量原子增加指定增量，供定时刷库任务批量折叠使用。
+     * 功能：将指定帖子的浏览量原子增加指定增量，供定时刷库任务从 Redis 折叠落库。
      *
      * @param postId 帖子主键
      * @param delta 浏览增量，大于 0
      * @return 受影响行数，0 表示帖子已不存在
      */
     int increaseViewNumberBy(@Param("postId") Long postId, @Param("delta") long delta);
+
+    /**
+     * 功能：按增量调整帖子点赞数聚合字段，供互动事件消费者异步维护。
+     *
+     * <p>聚减时以 GREATEST 兜底，计数不会出现负值。
+     *
+     * @param postId 帖子主键
+     * @param delta 计数增量，点赞 +1，取消点赞 -1
+     * @return 受影响行数，0 表示帖子已不存在
+     */
+    int adjustLikeNumber(@Param("postId") Long postId, @Param("delta") int delta);
+
+    /**
+     * 功能：按增量调整帖子收藏数聚合字段，语义与点赞数调整一致。
+     *
+     * @param postId 帖子主键
+     * @param delta 计数增量，收藏 +1，取消收藏 -1
+     * @return 受影响行数，0 表示帖子已不存在
+     */
+    int adjustCollectNumber(@Param("postId") Long postId, @Param("delta") int delta);
 }

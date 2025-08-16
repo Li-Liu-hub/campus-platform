@@ -8,6 +8,7 @@ import com.campushub.post.entity.PostCollect;
 import com.campushub.post.entity.PostLike;
 import com.campushub.post.mapper.PostCollectMapper;
 import com.campushub.post.mapper.PostLikeMapper;
+import com.campushub.post.mapper.PostMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -32,6 +33,8 @@ public class PostInteractionConsumer {
 
     private final PostCollectMapper postCollectMapper;
 
+    private final PostMapper postMapper;
+
     private final RedisService redisService;
 
     /**
@@ -50,7 +53,7 @@ public class PostInteractionConsumer {
         }
     }
 
-    /** 插入点赞记录，唯一键冲突说明重复消息，幂等丢弃；落库成功后榜单加点赞权重分。 */
+    /** 插入点赞记录，唯一键冲突说明重复消息，幂等丢弃；落库成功后聚合计数与榜单各加点赞权重。 */
     private void like(PostInteractionEvent event) {
         PostLike postLike = new PostLike();
         postLike.setLikePostId(event.postId());
@@ -62,10 +65,11 @@ public class PostInteractionConsumer {
             log.info("点赞记录已存在，幂等丢弃，postId={}，userId={}", event.postId(), event.userId());
             return;
         }
+        adjustLikeCount(event.postId(), 1);
         addRankScore(event.postId(), RankConstants.WEIGHT_LIKE);
     }
 
-    /** 删除点赞记录，记录不存在说明重复消息，幂等丢弃且不扣分；删除成功后榜单扣点赞权重分。 */
+    /** 删除点赞记录，记录不存在说明重复消息，幂等丢弃且不扣分；删除成功后聚合计数与榜单同步扣减。 */
     private void unlike(PostInteractionEvent event) {
         int rows = postLikeMapper.delete(Wrappers.<PostLike>lambdaQuery()
                 .eq(PostLike::getLikePostId, event.postId())
@@ -75,10 +79,11 @@ public class PostInteractionConsumer {
             log.info("点赞记录不存在，幂等丢弃，postId={}，userId={}", event.postId(), event.userId());
             return;
         }
+        adjustLikeCount(event.postId(), -1);
         addRankScore(event.postId(), -RankConstants.WEIGHT_LIKE);
     }
 
-    /** 插入收藏记录，幂等语义与点赞一致；落库成功后榜单加收藏权重分。 */
+    /** 插入收藏记录，幂等语义与点赞一致；落库成功后聚合计数与榜单各加收藏权重。 */
     private void collect(PostInteractionEvent event) {
         PostCollect postCollect = new PostCollect();
         postCollect.setCollectPostId(event.postId());
@@ -89,10 +94,11 @@ public class PostInteractionConsumer {
             log.info("收藏记录已存在，幂等丢弃，postId={}，userId={}", event.postId(), event.userId());
             return;
         }
+        adjustCollectCount(event.postId(), 1);
         addRankScore(event.postId(), RankConstants.WEIGHT_FAVORITE);
     }
 
-    /** 删除收藏记录，幂等语义与取消点赞一致；删除成功后榜单扣收藏权重分。 */
+    /** 删除收藏记录，幂等语义与取消点赞一致；删除成功后聚合计数与榜单同步扣减。 */
     private void uncollect(PostInteractionEvent event) {
         int rows = postCollectMapper.delete(Wrappers.<PostCollect>lambdaQuery()
                 .eq(PostCollect::getCollectPostId, event.postId())
@@ -101,7 +107,34 @@ public class PostInteractionConsumer {
             log.info("收藏记录不存在，幂等丢弃，postId={}，userId={}", event.postId(), event.userId());
             return;
         }
+        adjustCollectCount(event.postId(), -1);
         addRankScore(event.postId(), -RankConstants.WEIGHT_FAVORITE);
+    }
+
+    /**
+     * 功能：调整帖子点赞聚合计数，展示型冗余数据，失败仅记日志不补偿。
+     *
+     * <p>计数允许与 ch_like 行数存在瞬时不一致（at-most-once），需要精确值时
+     * 以明细表 COUNT 为准重新校准。
+     *
+     * @param postId 帖子 ID
+     * @param delta 计数增量，+1 点赞，-1 取消
+     */
+    private void adjustLikeCount(Long postId, int delta) {
+        try {
+            postMapper.adjustLikeNumber(postId, delta);
+        } catch (Exception exception) {
+            log.error("点赞聚合计数调整失败，postId={}，delta={}", postId, delta, exception);
+        }
+    }
+
+    /** 功能：调整帖子收藏聚合计数，容错语义与点赞计数一致。 */
+    private void adjustCollectCount(Long postId, int delta) {
+        try {
+            postMapper.adjustCollectNumber(postId, delta);
+        } catch (Exception exception) {
+            log.error("收藏聚合计数调整失败，postId={}，delta={}", postId, delta, exception);
+        }
     }
 
     /**

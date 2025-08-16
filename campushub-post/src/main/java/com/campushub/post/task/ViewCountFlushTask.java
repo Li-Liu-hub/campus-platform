@@ -76,7 +76,7 @@ public class ViewCountFlushTask {
     }
 
     /**
-     * 功能：将浏览增量落库到帖子表，失败时增量原样记回 Hash 等待下轮重试。
+     * 功能：将浏览增量折叠落库到帖子表浏览量统计，失败时增量原样记回 Hash 等待下轮重试。
      *
      * @param field 帖子 ID 字符串
      * @param delta 浏览增量

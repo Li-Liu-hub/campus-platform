@@ -51,18 +51,24 @@
         LIMIT #{pageSize}
     </select>
 
-    <update id="increaseViewNumber">
-        <!-- 浏览量原子自增：由数据库单条 UPDATE 保证并发下不丢计数 -->
-        UPDATE ch_post
-        SET post_view_number = post_view_number + 1
-        WHERE post_id = #{postId}
-          AND post_is_delete = 0
-    </update>
-
     <update id="increaseViewNumberBy">
         <!-- 定时刷库任务批量折叠：按 Redis 聚合增量一次性累加，不加软删除条件以免增量丢失 -->
         UPDATE ch_post
         SET post_view_number = post_view_number + #{delta}
+        WHERE post_id = #{postId}
+    </update>
+
+    <update id="adjustLikeNumber">
+        <!-- 点赞数聚合调整：GREATEST 兜底计数不为负，消费者异步调用，失败仅影响展示计数 -->
+        UPDATE ch_post
+        SET post_like_number = GREATEST(post_like_number + #{delta}, 0)
+        WHERE post_id = #{postId}
+    </update>
+
+    <update id="adjustCollectNumber">
+        <!-- 收藏数聚合调整：语义与点赞数一致 -->
+        UPDATE ch_post
+        SET post_collect_number = GREATEST(post_collect_number + #{delta}, 0)
         WHERE post_id = #{postId}
     </update>
 

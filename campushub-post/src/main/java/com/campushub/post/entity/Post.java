@@ -39,9 +39,17 @@ public class Post {
     @TableField("post_idempotency_key")
     private String postIdempotencyKey;
 
-    /** 帖子浏览量。 */
+    /** 帖子浏览量统计，浏览增量由定时任务从 Redis 折叠落库。 */
     @TableField("post_view_number")
     private Long postViewNumber;
+
+    /** 帖子点赞数，由互动事件消费者异步聚合维护的冗余计数。 */
+    @TableField("post_like_number")
+    private Long postLikeNumber;
+
+    /** 帖子收藏数，由互动事件消费者异步聚合维护的冗余计数。 */
+    @TableField("post_collect_number")
+    private Long postCollectNumber;
 
     /** 作者昵称，来自 ch_user 关联查询，非本表字段。 */
     @TableField(exist = false)
