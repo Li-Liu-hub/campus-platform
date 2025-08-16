@@ -5,16 +5,21 @@ import com.campushub.common.exception.BusinessException;
 import com.campushub.common.exception.ErrorCode;
 import com.campushub.common.log.OperationLog;
 import com.campushub.common.log.OperationTypes;
+import com.campushub.common.mq.MqConstants;
 import com.campushub.common.util.StringUtils;
+import com.campushub.infrastructure.mq.MessagePublisher;
 import com.campushub.infrastructure.redis.RedisService;
 import com.campushub.infrastructure.security.AuthenticationService;
 import com.campushub.post.constant.PostCategories;
 import com.campushub.post.constant.PostRedisKeys;
+import com.campushub.post.consumer.CacheEvictEvent;
 import com.campushub.post.dto.PostCreateRequest;
 import com.campushub.post.dto.PostQueryRequest;
 import com.campushub.post.dto.PostUpdateRequest;
 import com.campushub.post.entity.Post;
+import com.campushub.post.entity.PostView;
 import com.campushub.post.mapper.PostMapper;
+import com.campushub.post.mapper.PostViewMapper;
 import com.campushub.post.service.PostService;
 import com.campushub.post.vo.PostFeedVO;
 import com.campushub.post.vo.PostPageVO;
@@ -38,11 +43,15 @@ public class PostServiceImpl implements PostService {
 
     private final PostMapper postMapper;
 
+    private final PostViewMapper postViewMapper;
+
     private final AuthenticationService authenticationService;
 
     private final StringUtils stringUtils;
 
     private final RedisService redisService;
+
+    private final MessagePublisher messagePublisher;
 
     private final ObjectMapper objectMapper;
 
@@ -105,11 +114,12 @@ public class PostServiceImpl implements PostService {
     }
 
     /**
-     * 功能：浏览帖子，优先读取详情缓存并将浏览增量记入 Redis 聚合 Hash。
+     * 功能：浏览帖子，读取详情并留下浏览明细，浏览增量记入 Redis 聚合 Hash 等待折叠落库。
      *
      * <p>详情读取为单键三分支：命中 JSON 直接返回；空串占位说明该 ID 已验证不存在，
      * 直接拒绝以挡住穿透请求；未命中才回源数据库并写回缓存。浏览增量通过一条
-     * HINCRBY 记账，field 不存在时自动从 0 累加，落库由后续定时任务折叠处理。
+     * HINCRBY 记账，field 不存在时自动从 0 累加，落库由后续定时任务折叠处理；
+     * 浏览明细行同步追加，失败仅记日志不反噬主流程。
      *
      * @param postId 帖子主键，不允许为空
      * @return 帖子详情，浏览量为缓存快照，允许短暂滞后于真实累计值
@@ -119,6 +129,8 @@ public class PostServiceImpl implements PostService {
     public PostVO view(Long postId) {
         // 详情复用 getById 的缓存读取，MySQL 全程无感知（命中时）
         PostVO postVO = getById(postId);
+        // 每次浏览追加一条明细，供审计与行为分析，失败不影响浏览主流程
+        recordViewDetail(postId);
         // 浏览增量记账：替代原先每次浏览的数据库 UPDATE；当前未启用定时落库，增量暂存于 Hash
         try {
             redisService.hIncrBy(VIEW_DELTA_KEY, String.valueOf(postId), 1L);
@@ -127,6 +139,18 @@ public class PostServiceImpl implements PostService {
             log.warn("浏览增量记账失败，postId={}", postId, exception);
         }
         return postVO;
+    }
+
+    /** 追加一条浏览明细行，明细属非关键数据，写失败仅记日志不补偿。 */
+    private void recordViewDetail(Long postId) {
+        try {
+            PostView detail = new PostView();
+            detail.setPostId(postId);
+            detail.setViewUserId(authenticationService.getCurrentUserId());
+            postViewMapper.insert(detail);
+        } catch (Exception exception) {
+            log.warn("浏览明细写入失败，postId={}", postId, exception);
+        }
     }
 
     /** 按条件游标分页查询帖子，返回本页数据和下一页游标，默认按创建时间倒序。 */
@@ -164,7 +188,20 @@ public class PostServiceImpl implements PostService {
         return Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
     }
 
-    /** 修改当前登录用户创建的帖子，不更新创建时间和更新时间字段；操作留痕由日志切面异步完成。 */
+    /**
+     * 功能：修改当前登录用户创建的帖子，写路径为"更新 DB → 删缓存 → 投递延迟双删指令"。
+     *
+     * <p>先改库再删缓存（删除幂等，最坏代价只是下一位读者多一次回源）；随后向停车队列
+     * 发布删除指令，消息滞留 500ms 过期后经死信改道由消费者执行第二次删除，兜住
+     * "并发读在两次删除之间回源旧值写回缓存"的脏窗口。投递失败由 publisher 内部
+     * 静默降级（异步消息永不反噬主流程），残留脏缓存由 TTL 到期自愈。不更新创建
+     * 时间和更新时间字段；操作留痕由日志切面异步完成。
+     *
+     * @param postId 帖子主键，不允许为空
+     * @param request 更新内容，标题必填、分类必填
+     * @return 更新后的帖子详情（读取自详情缓存回源结果）
+     * @throws BusinessException 帖子不存在抛 404，非本人帖子抛 403，参数非法抛 400
+     */
     @OperationLog(type = OperationTypes.POST_UPDATE, targetId = "#args[0]")
     @Override
     public PostVO update(Long postId, PostUpdateRequest request) {
@@ -173,9 +210,22 @@ public class PostServiceImpl implements PostService {
         post.setPostType(normalizePostType(request.postType(), true));
         post.setPostText(request.postText());
         postMapper.updateById(post);
-        // 写路径采用先改库再删缓存：删除幂等，最坏代价只是下一位读者多一次回源
         evictCache(postId);
+        publishDelayEvict(postId);
         return getById(postId);
+    }
+
+    /**
+     * 功能：向缓存域交换机发布延迟双删指令，路由进停车队列滞留 500ms 后死信改道删除队列。
+     *
+     * @param postId 帖子主键，不允许为空
+     */
+    private void publishDelayEvict(Long postId) {
+        messagePublisher.publish(
+                MqConstants.CACHE_EXCHANGE,
+                MqConstants.CACHE_DELAY_DELETE_ROUTING,
+                new CacheEvictEvent(postId),
+                "cache:delay-delete:" + postId);
     }
 
     /** 软删除当前登录用户创建的帖子。 */

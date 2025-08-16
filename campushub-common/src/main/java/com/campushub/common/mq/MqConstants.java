@@ -27,17 +27,29 @@ public final class MqConstants {
     /** 操作日志死信队列，积压消息人工处理。 */
     public static final String LOG_DLQ = "campushub.log.dlq.queue";
 
-    /** 缓存域交换机（topic），延迟双删链路预留，功能落地时启用。 */
+    /** 缓存域交换机（topic），承载延迟双删的删除指令，并兼任停车队列的死信出口。 */
     public static final String CACHE_EXCHANGE = "campushub.cache";
 
-    /** 缓存删除队列，延迟双删链路预留，功能落地时启用。 */
-    public static final String CACHE_DELETE_QUEUE = "campushub.cache.delete.queue";
+    /** 缓存停车队列：无消费者，消息靠队列级 TTL 过期后死信改道，为延迟双删提供时间延迟。 */
+    public static final String CACHE_PARKING_QUEUE = "campushub.cache.parking.queue";
 
-    /** 延迟双删的路由键，延迟双删链路预留，功能落地时启用。 */
+    /** 延迟双删投递路由键，业务方凭此键把删除指令发布进停车队列。 */
     public static final String CACHE_DELAY_DELETE_ROUTING = "campushub.cache.delay-delete";
 
-    /** 缓存删除的死信改写键，延迟双删链路预留，功能落地时启用。 */
+    /** 缓存删除的死信改写键，停车队列消息过期后凭此键改道进入删除队列。 */
     public static final String CACHE_DELETE_ROUTING = "campushub.cache.delete";
+
+    /** 缓存删除队列，消费者执行延迟双删的第二次删除。 */
+    public static final String CACHE_DELETE_QUEUE = "campushub.cache.delete.queue";
+
+    /** 缓存域死信交换机，接收删除指令本地重试耗尽的消息。 */
+    public static final String CACHE_DLX = "campushub.cache.dlq";
+
+    /** 缓存域死信路由键。 */
+    public static final String CACHE_DEAD_ROUTING = "campushub.cache.dead";
+
+    /** 缓存域死信队列，删除指令重试耗尽后积压人工处理。 */
+    public static final String CACHE_DLQ = "campushub.cache.dlq.queue";
 
     /** 帖子域交换机（topic），承载点赞/收藏等帖子域事件。 */
     public static final String POST_EXCHANGE = "campushub.post";

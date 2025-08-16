@@ -30,6 +30,9 @@ import java.nio.charset.StandardCharsets;
 @RequiredArgsConstructor
 public class RabbitMqConfig {
 
+    /** 停车队列 TTL 毫秒数，即二次删除与业务删除之间的时间差。 */
+    private static final long DELAY_DELETE_TTL_MS = 500;
+
     private final OutboxService outboxService;
 
     /**
@@ -177,5 +180,75 @@ public class RabbitMqConfig {
     public Binding postInteractionDlqBinding() {
         return BindingBuilder.bind(postInteractionDlqQueue()).to(postInteractionDlxExchange())
                 .with(MqConstants.POST_INTERACTION_DEAD_ROUTING);
+    }
+
+    /**
+     * 声明缓存域交换机，持久化，topic 类型。
+     *
+     * <p>兼任双重角色：正常路径接收延迟删除指令（campushub.cache.delay-delete），
+     * 死信路径承接停车队列过期消息的改道投递（campushub.cache.delete）。两个路由键
+     * 字符串互不匹配，因此死信改道不会重新落回停车队列形成循环。
+     */
+    @Bean
+    public TopicExchange cacheExchange() {
+        return new TopicExchange(MqConstants.CACHE_EXCHANGE, true, false);
+    }
+
+    /**
+     * 声明缓存停车队列：刻意不设消费者，消息滞留至队列级 TTL（500ms）到期后，
+     * 以改写的死信路由键投递到缓存域交换机，进入删除队列，实现延迟双删的时间延迟。
+     *
+     * <p>使用队列级而非消息级 TTL：队列级 TTL 下所有消息滞留时长一致，先进队列的
+     * 消息先过期先投递，避免消息级 TTL 各不相同导致的队头阻塞。
+     */
+    @Bean
+    public Queue cacheParkingQueue() {
+        return QueueBuilder.durable(MqConstants.CACHE_PARKING_QUEUE)
+                .deadLetterExchange(MqConstants.CACHE_EXCHANGE)
+                .deadLetterRoutingKey(MqConstants.CACHE_DELETE_ROUTING)
+                .ttl((int) DELAY_DELETE_TTL_MS)
+                .build();
+    }
+
+    /** 将停车队列按延迟删除路由键绑定到缓存域交换机。 */
+    @Bean
+    public Binding cacheParkingBinding() {
+        return BindingBuilder.bind(cacheParkingQueue()).to(cacheExchange())
+                .with(MqConstants.CACHE_DELAY_DELETE_ROUTING);
+    }
+
+    /** 声明缓存删除队列，持久化；本地重试耗尽的删除指令死信兜底，不静默丢弃。 */
+    @Bean
+    public Queue cacheDeleteQueue() {
+        return QueueBuilder.durable(MqConstants.CACHE_DELETE_QUEUE)
+                .deadLetterExchange(MqConstants.CACHE_DLX)
+                .deadLetterRoutingKey(MqConstants.CACHE_DEAD_ROUTING)
+                .build();
+    }
+
+    /** 将删除队列按删除路由键绑定到缓存域交换机。 */
+    @Bean
+    public Binding cacheDeleteBinding() {
+        return BindingBuilder.bind(cacheDeleteQueue()).to(cacheExchange())
+                .with(MqConstants.CACHE_DELETE_ROUTING);
+    }
+
+    /** 声明缓存域死信交换机，持久化。 */
+    @Bean
+    public TopicExchange cacheDlxExchange() {
+        return new TopicExchange(MqConstants.CACHE_DLX, true, false);
+    }
+
+    /** 声明缓存域死信队列，持久化，由人工消费处理重试耗尽的删除指令。 */
+    @Bean
+    public Queue cacheDlqQueue() {
+        return QueueBuilder.durable(MqConstants.CACHE_DLQ).build();
+    }
+
+    /** 将缓存域死信队列绑定到缓存域死信交换机。 */
+    @Bean
+    public Binding cacheDlqBinding() {
+        return BindingBuilder.bind(cacheDlqQueue()).to(cacheDlxExchange())
+                .with(MqConstants.CACHE_DEAD_ROUTING);
     }
 }
