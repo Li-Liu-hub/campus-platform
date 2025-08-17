@@ -35,7 +35,7 @@ services:
       - campushub-mysql-data:/var/lib/mysql
 
   redis:
-    # HSETEX/HGETDEL（哈希字段级原子操作）自 Redis 8.0 起提供，抢单分布式锁依赖
+    # HGETDEL（哈希字段级原子取删）自 Redis 8.0 起提供，浏览增量刷库依赖；抢单锁已改用 String + Lua，无版本要求
     image: redis:8-alpine
     container_name: campushub-redis
     ports:

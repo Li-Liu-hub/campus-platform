@@ -157,9 +157,9 @@ public class OrderServiceImpl implements OrderService {
     /**
      * 功能：抢单，分布式锁串行化同一订单的竞争请求，数据库状态条件更新兜底。
      *
-     * <p>流程：获取锁（HSETEX FNX EX，字段级 TTL 10 秒超时自动释放）→ 锁内校验
+     * <p>流程：获取锁（SET NX EX，键级 TTL 10 秒超时自动释放）→ 锁内校验
      * 订单存在、非本人订单、仍待接单 → 条件更新回填接单人（兜底：即使锁失效，
-     * 数据库行锁 + 状态条件也保证仅一人成功）→ 释放锁（HGETDEL 自身字段）。
+     * 数据库行锁 + 状态条件也保证仅一人成功）→ 释放锁（Lua 脚本比对 token 匹配才删除）。
      *
      * <p>Redis 不可用时降级为直接走数据库条件更新，正确性不受影响，仅竞争烈度变大。
      *
@@ -203,7 +203,7 @@ public class OrderServiceImpl implements OrderService {
             try {
                 distributedLockService.unlock(lockKey, token);
             } catch (Exception exception) {
-                // 释放失败仅记录，锁由字段级 TTL 到期自动释放
+                // 释放失败仅记录，锁由键级 TTL 到期自动释放
                 log.warn("抢单锁释放失败，等待 TTL 自动过期，orderId={}", orderId, exception);
             }
         }
