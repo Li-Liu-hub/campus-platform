@@ -15,9 +15,10 @@ import java.util.Set;
  * 功能：浏览增量定时刷库任务，把 campushub:post:view:delta 聚合 Hash 中的增量批量落库，
  * 并在落库成功后给当日热度榜加权加分。
  *
- * <p>浏览是高频可折叠事件，与点赞/收藏的单行事件不同，采用时间驱动批量聚合：
+ * <p>浏览、点赞、收藏计数同为可折叠聚合量，统一采用时间驱动批量聚合：
  * 定时任务驱动，HSCAN 枚举字段、HGETDEL 原子取走增量、批量落库，DB 失败补偿记回 Hash 下轮重试，
  * 榜单加分在 DB 成功之后且失败不补偿（展示型数据 at-most-once）。
+ * 点赞/收藏计数走同构的 InteractionCountFlushTask，明细行仍由 MQ 消费者事件驱动落库。
  */
 @Slf4j
 @Component
