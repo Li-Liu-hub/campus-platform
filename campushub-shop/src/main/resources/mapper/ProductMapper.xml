@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campushub.shop.mapper.ProductMapper">
+
+    <update id="deductStock">
+        <!-- 下单扣库存：条件更新保证库存充足才扣，影响行数 0 表示并发下已被抢空 -->
+        UPDATE ch_product
+        SET product_stock = product_stock - #{number}
+        WHERE product_id = #{productId}
+          AND product_stock >= #{number}
+    </update>
+
+</mapper>
