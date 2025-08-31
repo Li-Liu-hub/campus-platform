@@ -12,4 +12,12 @@
           AND product_stock >= #{number}
     </update>
 
+    <update id="adjustStock">
+        <!-- 库存增量调整：减少量超过当前库存时条件不成立，影响行数 0，库存不会被调成负数 -->
+        UPDATE ch_product
+        SET product_stock = product_stock + #{delta}
+        WHERE product_id = #{productId}
+          AND product_stock + #{delta} >= 0
+    </update>
+
 </mapper>

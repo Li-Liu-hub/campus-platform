@@ -18,6 +18,7 @@ import com.campushub.shop.vo.ProductVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -96,15 +97,34 @@ public class ProductServiceImpl implements ProductService {
         return new PageVO<>(list, true, lastProduct.getCreateTime(), lastProduct.getProductId());
     }
 
-    /** 修改自己店铺下的商品。 */
+    /**
+     * 功能：修改自己店铺下的商品，商品名称、价格、上架状态按传入值更新，库存只按调整量增减。
+     *
+     * <p>库存刻意不走字段覆盖：这里查出来的商品实体带着读取时刻的库存快照，若直接整体
+     * updateById，就会把快照之后并发下单已经扣掉的库存又写回去，造成可售数量大于实际库存。
+     * 所以先构造只含待改字段的实体（库存字段留空，MyBatis-Plus 默认策略不会写入该列），
+     * 再用条件更新按调整量增减库存。整段操作在同一事务内，库存调整失败会连带回滚字段修改。
+     *
+     * @param productId 商品 ID，必须属于当前登录用户的店铺
+     * @param request 修改请求，含名称、价格、上架状态与库存调整量（正数补货、负数减库、0 表示不调整）
+     * @return 修改后的商品信息
+     * @throws BusinessException 商品不存在抛 404，不属于自己抛 403，库存减少量超过当前库存抛 409
+     */
     @Override
+    @Transactional
     public ProductVO update(Long productId, ProductUpdateRequest request) {
         Product product = requireOwnedProduct(productId);
-        product.setProductName(request.productName().trim());
-        product.setProductPrice(request.productPrice());
-        product.setProductStock(request.productStock());
-        product.setProductStatus(request.productStatus());
-        productMapper.updateById(product);
+        // 只带真正要改的字段，避免把读出来的库存快照写回数据库
+        Product changed = new Product();
+        changed.setProductId(product.getProductId());
+        changed.setProductName(request.productName().trim());
+        changed.setProductPrice(request.productPrice());
+        changed.setProductStatus(request.productStatus());
+        productMapper.updateById(changed);
+        long stockDelta = request.productStockDelta();
+        if (stockDelta != 0 && productMapper.adjustStock(product.getProductId(), stockDelta) == 0) {
+            throw new BusinessException(ErrorCode.CONFLICT, "库存减少数量超过当前库存");
+        }
         return getById(productId);
     }
 
