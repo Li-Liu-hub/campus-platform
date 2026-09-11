@@ -7,10 +7,14 @@ CREATE TABLE IF NOT EXISTS `ch_outbox`
     `payload`      TEXT         NOT NULL COMMENT '消息体 JSON 文本',
     `status`       TINYINT      NOT NULL DEFAULT 0 COMMENT '发布状态：0 待确认（未确认即轮询重发），1 broker 已确认',
     `retry_count`  INT          NOT NULL DEFAULT 0 COMMENT '轮询中继累计尝试发送次数',
+    `next_retry_time` DATETIME            COMMENT '下次允许重发时刻，按重试次数指数退避；NULL 表示立即可发',
     `create_time`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间，与业务数据同事务写入保证原子性',
     `confirm_time` DATETIME              COMMENT 'broker 确认时间，清理任务的判断依据',
     PRIMARY KEY (`id`),
-    KEY `idx_status_create` (`status`, `create_time`)
+    -- 中继按「状态 + 到期时刻」筛选待发消息，避免队头阻塞
+    KEY `idx_status_next_retry` (`status`, `next_retry_time`),
+    -- 清理任务按「状态 + 确认时间」定位已确认的过期消息
+    KEY `idx_status_confirm` (`status`, `confirm_time`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
