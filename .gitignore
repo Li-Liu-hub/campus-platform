@@ -14,14 +14,14 @@
 # Tomcat 访问日志挂载目录
 tomcat-logs/
 
-# JMeter 压测原始结果（结论沉淀在各功能点文件夹的 result md，仓库只保留 jmx 与 md）
-JMeterTest/**/*.jtl
-JMeterTest/**/counters/
-JMeterTest/**/ids-*.txt
-JMeterTest/**/*-ids.txt
-JMeterTest/**/tokens-*.txt
-JMeterTest/**/*-half.txt
-JMeterTest/**/seg-*.csv
-JMeterTest/**/*ID.txt
-JMeterTest/**/cold-read-ids.txt
-JMeterTest/*.jar
+# 本仓库只保留业务代码与构建配置，以下内容不入库
+# 文档
+docs/
+*.md
+# 压测与实验目录
+JMeterTest/
+work/
+# 本地工具与运行时数据
+.workbuddy/
+logs/
+*.drawio
