@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campushub.admin.mapper.AdminDataMapper">
+
+    <select id="selectUserPage" resultType="com.campushub.admin.vo.AdminUserVO">
+        <!-- 游标分页：(create_time, user_id) 二元组倒序，排序列与游标列一致 -->
+        SELECT u.user_id,
+               u.user_name,
+               u.user_nickname,
+               u.user_role,
+               u.user_amount,
+               u.user_personal_signature,
+               u.create_time
+        FROM ch_user u
+        WHERE u.user_is_delete = 0
+        <if test="cursorTime != null and cursorId != null">
+            AND (u.create_time &lt; #{cursorTime}
+                OR (u.create_time = #{cursorTime} AND u.user_id &lt; #{cursorId}))
+        </if>
+        ORDER BY u.create_time DESC, u.user_id DESC
+        LIMIT #{pageSize}
+    </select>
+
+    <select id="selectPostPage" resultType="com.campushub.admin.vo.AdminPostVO">
+        <!-- 直查业务表并 LEFT JOIN 取昵称：不依赖帖子模块的 service 与实体 -->
+        SELECT p.post_id,
+               p.post_title,
+               p.post_type,
+               p.post_user_id,
+               u.user_nickname AS post_user_nickname,
+               p.post_view_number,
+               p.post_like_number,
+               p.post_collect_number,
+               p.create_time
+        FROM ch_post p
+        LEFT JOIN ch_user u
+               ON u.user_id = p.post_user_id
+              AND u.user_is_delete = 0
+        WHERE p.post_is_delete = 0
+        <if test="cursorTime != null and cursorId != null">
+            AND (p.create_time &lt; #{cursorTime}
+                OR (p.create_time = #{cursorTime} AND p.post_id &lt; #{cursorId}))
+        </if>
+        ORDER BY p.create_time DESC, p.post_id DESC
+        LIMIT #{pageSize}
+    </select>
+
+    <select id="selectShopPage" resultType="com.campushub.admin.vo.AdminShopVO">
+        SELECT s.shop_id,
+               s.shop_name,
+               s.shop_user_id,
+               u.user_nickname AS shop_user_nickname,
+               s.shop_description,
+               s.create_time
+        FROM ch_shop s
+        LEFT JOIN ch_user u
+               ON u.user_id = s.shop_user_id
+              AND u.user_is_delete = 0
+        WHERE s.shop_is_delete = 0
+        <if test="cursorTime != null and cursorId != null">
+            AND (s.create_time &lt; #{cursorTime}
+                OR (s.create_time = #{cursorTime} AND s.shop_id &lt; #{cursorId}))
+        </if>
+        ORDER BY s.create_time DESC, s.shop_id DESC
+        LIMIT #{pageSize}
+    </select>
+
+    <select id="selectProductPage" resultType="com.campushub.admin.vo.AdminProductVO">
+        SELECT p.product_id,
+               p.product_name,
+               p.product_shop_id,
+               s.shop_name,
+               p.product_price,
+               p.product_stock,
+               p.product_stock_locked,
+               p.product_status,
+               p.create_time
+        FROM ch_product p
+        LEFT JOIN ch_shop s
+               ON s.shop_id = p.product_shop_id
+              AND s.shop_is_delete = 0
+        WHERE p.product_is_delete = 0
+        <if test="cursorTime != null and cursorId != null">
+            AND (p.create_time &lt; #{cursorTime}
+                OR (p.create_time = #{cursorTime} AND p.product_id &lt; #{cursorId}))
+        </if>
+        ORDER BY p.create_time DESC, p.product_id DESC
+        LIMIT #{pageSize}
+    </select>
+
+    <select id="selectUserRole" resultType="java.lang.String">
+        <!-- null 表示用户不存在或已删除，调用方按"非管理员"处理 -->
+        SELECT u.user_role
+        FROM ch_user u
+        WHERE u.user_id = #{userId}
+          AND u.user_is_delete = 0
+    </select>
+
+</mapper>

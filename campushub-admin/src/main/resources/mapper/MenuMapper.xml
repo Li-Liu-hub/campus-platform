@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campushub.admin.mapper.MenuMapper">
+
+    <select id="selectMenusByRoleCode" resultType="com.campushub.admin.vo.MenuVO">
+        <!--
+          角色 -> 菜单的授权链路：ch_role 按编码关联 ch_user.user_role，经 ch_role_menu 取授权菜单。
+          排序按「父 + 同级排序」升序，服务层分组建树时无需再排序。
+        -->
+        SELECT m.menu_id,
+               m.menu_parent_id,
+               m.menu_name,
+               m.menu_path,
+               m.menu_component,
+               m.menu_icon,
+               m.menu_sort,
+               m.menu_visible,
+               m.menu_permission
+        FROM ch_menu m
+        JOIN ch_role_menu rm
+              ON rm.role_menu_menu_id = m.menu_id
+        JOIN ch_role r
+              ON r.role_id = rm.role_menu_role_id
+        WHERE r.role_code = #{roleCode}
+          AND r.role_is_delete = 0
+          AND m.menu_is_delete = 0
+        ORDER BY m.menu_parent_id ASC, m.menu_sort ASC, m.menu_id ASC
+    </select>
+
+</mapper>
