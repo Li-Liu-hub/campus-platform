@@ -17,6 +17,6 @@ public class LoginVO {
     /** 用户昵称。 */
     private String userNickname;
 
-    /** Sa-Token 登录凭证，后续请求需通过 satoken 请求头携带。 */
+    /** Sa-Token 登录凭证，后续请求需通过 Authorization: Bearer <tokenValue> 请求头携带。 */
     private String tokenValue;
 }
