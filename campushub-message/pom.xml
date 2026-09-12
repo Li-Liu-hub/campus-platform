@@ -6,40 +6,17 @@
         <artifactId>campushub</artifactId>
         <version>0.0.1-SNAPSHOT</version>
     </parent>
-    <artifactId>campushub-web</artifactId>
-    <name>campushub-web</name>
+    <artifactId>campushub-message</artifactId>
+    <name>campushub-message</name>
     <dependencies>
         <dependency>
             <groupId>com.campushub</groupId>
             <artifactId>campushub-common</artifactId>
         </dependency>
+        <!-- 实时推送能力（RealtimePushService）由基础设施模块提供，本模块不感知 WebSocket API -->
         <dependency>
             <groupId>com.campushub</groupId>
-            <artifactId>campushub-system</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.campushub</groupId>
-            <artifactId>campushub-user</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.campushub</groupId>
-            <artifactId>campushub-admin</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.campushub</groupId>
-            <artifactId>campushub-post</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.campushub</groupId>
-            <artifactId>campushub-order</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.campushub</groupId>
-            <artifactId>campushub-shop</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.campushub</groupId>
-            <artifactId>campushub-message</artifactId>
+            <artifactId>campushub-infrastructure</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -62,25 +39,9 @@
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-log4j2</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>cn.dev33</groupId>
-            <artifactId>sa-token-spring-boot3-starter</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
     </dependencies>
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
-    </build>
 </project>

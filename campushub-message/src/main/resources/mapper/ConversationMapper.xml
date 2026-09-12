@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campushub.message.mapper.ConversationMapper">
+
+    <select id="selectPageWithPeer" resultType="com.campushub.message.mapper.ConversationListRow">
+        <!--
+          一条 SQL 组装会话列表的全部展示字段：
+          对方用户与昵称按当前用户取反（A 侧命中取 B，B 侧命中取 A）；
+          最后消息取 MAX(message_id)——消息 ID 单调递增即最后一条，子查询走 idx_conversation_message；
+          未读数按会话聚合当前用户的未读，走 idx_receiver_unread 前两列。
+        -->
+        SELECT c.conversation_id,
+               IF(c.conversation_user_a_id = #{userId}, c.conversation_user_b_id, c.conversation_user_a_id) AS peer_user_id,
+               u.user_nickname AS peer_nickname,
+               c.conversation_title,
+               m.message_text AS last_message_text,
+               m.create_time AS last_message_time,
+               IFNULL(x.unread_count, 0) AS unread_count,
+               c.create_time
+        FROM ch_conversation c
+        LEFT JOIN ch_user u
+               ON u.user_id = IF(c.conversation_user_a_id = #{userId}, c.conversation_user_b_id, c.conversation_user_a_id)
+              AND u.user_is_delete = 0
+        LEFT JOIN ch_message m
+               ON m.message_id = (SELECT MAX(m2.message_id)
+                                   FROM ch_message m2
+                                   WHERE m2.message_conversation_id = c.conversation_id)
+        LEFT JOIN (SELECT message_conversation_id, COUNT(*) AS unread_count
+                   FROM ch_message
+                   WHERE message_receive_user_id = #{userId}
+                     AND message_is_read = 0
+                   GROUP BY message_conversation_id) x
+               ON x.message_conversation_id = c.conversation_id
+        WHERE (c.conversation_user_a_id = #{userId} OR c.conversation_user_b_id = #{userId})
+        <if test="cursorTime != null and cursorId != null">
+            <!-- 游标：从上一页末行的 (create_time, conversation_id) 接着往下找，已读数据不再经过 -->
+            AND (c.create_time &lt; #{cursorTime}
+                OR (c.create_time = #{cursorTime} AND c.conversation_id &lt; #{cursorId}))
+        </if>
+        ORDER BY c.create_time DESC, c.conversation_id DESC
+        LIMIT #{pageSize}
+    </select>
+
+    <select id="selectActiveUserNickname" resultType="java.lang.String">
+        <!-- 未删除用户的昵称，null 表示用户不存在或已删除 -->
+        SELECT u.user_nickname
+        FROM ch_user u
+        WHERE u.user_id = #{userId}
+          AND u.user_is_delete = 0
+    </select>
+
+</mapper>

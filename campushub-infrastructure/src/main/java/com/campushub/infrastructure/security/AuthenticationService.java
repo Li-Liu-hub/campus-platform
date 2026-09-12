@@ -39,6 +39,14 @@ public interface AuthenticationService {
     Long getCurrentUserId();
 
     /**
+     * 功能：根据 Token 值解析登录用户主键，供无请求上下文的场景使用（如 WebSocket 握手认证）。
+     *
+     * @param tokenValue 登录凭证原文，允许为空
+     * @return 用户主键；Token 为空、不存在或已失效时返回 null
+     */
+    Long getUserIdByToken(String tokenValue);
+
+    /**
      * 功能：查询指定用户的登录设备列表，并返回不包含完整 Token 的会话信息。
      *
      * @param userId 用户主键，不允许为空

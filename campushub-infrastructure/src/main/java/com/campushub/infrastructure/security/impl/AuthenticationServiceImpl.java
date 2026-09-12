@@ -66,7 +66,20 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     /** 获取当前登录用户主键，未登录时返回 null。 */
     @Override
     public Long getCurrentUserId() {
-        Object loginId = StpUtil.getLoginIdDefaultNull();
+        return resolveLoginId(StpUtil.getLoginIdDefaultNull());
+    }
+
+    /** 根据 Token 值解析登录用户主键，供 WebSocket 握手等无请求上下文的场景使用。 */
+    @Override
+    public Long getUserIdByToken(String tokenValue) {
+        if (tokenValue == null || tokenValue.isBlank()) {
+            return null;
+        }
+        return resolveLoginId(StpUtil.getLoginIdByToken(tokenValue));
+    }
+
+    /** 将 Sa-Token 返回的登录 ID 统一转换为 Long，入参为 null 时原样返回。 */
+    private Long resolveLoginId(Object loginId) {
         if (loginId == null) {
             return null;
         }
