@@ -5,7 +5,11 @@ spring:
       pool:
         size: 4
   datasource:
-    url: jdbc:mysql://localhost:3306/campushub?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    # 端口 3307 对应 docker-compose 里 mysql 的 "3307:3306" 映射——刻意避开本机可能已有的 3306 MySQL，
+    # 改动 compose 的 CAMPUSHUB_MYSQL_PORT 时这里要同步；需要连别的库用 DB_URL 覆盖
+    # allowPublicKeyRetrieval=true：MySQL 8 默认 caching_sha2_password，在 useSSL=false 时
+    # 必须显式允许明文取公钥，否则 JDBC 报 "Public Key Retrieval is not allowed"（与 prod 配置保持一致）
+    url: ${DB_URL:jdbc:mysql://localhost:3307/campushub?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -66,3 +70,14 @@ server:
       file-date-format: .yyyy-MM-dd
       suffix: .log
       pattern: "%t %r %s %Dms"
+
+campushub:
+  shop:
+    # 待付款购买记录的存活时长（分钟）：超时后由定时任务关闭并把冻结库存回补到可卖量。
+    # 本地验证该功能时可临时调成 5，不用等满 15 分钟。
+    order-timeout-minutes: 15
+    # 超时扫描单批最多处理的记录数，避免一次锁定过多行
+    timeout-batch-size: 200
+    # 超时扫描间隔（毫秒），默认 60 秒
+    timeout-scan-interval-ms: 60000
+

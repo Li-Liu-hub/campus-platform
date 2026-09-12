@@ -32,9 +32,13 @@ public class Product {
     @TableField("product_price")
     private BigDecimal productPrice;
 
-    /** 商品库存。 */
+    /** 可卖库存：下单冻结时减少，取消或超时后回补，付款后不再回补。 */
     @TableField("product_stock")
     private Long productStock;
+
+    /** 冻结库存：已下单未付款占用中，付款后消耗。卖家不可手工调整。 */
+    @TableField("product_stock_locked")
+    private Long productStockLocked;
 
     /** 上架状态：1 上架，0 下架。 */
     @TableField("product_status")

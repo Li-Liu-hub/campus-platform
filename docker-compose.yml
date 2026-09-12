@@ -6,6 +6,8 @@ services:
     container_name: campushub-app
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      # 与应用内 TimeZone.setDefault 保持一致，避免容器日志时间与业务时间差 8 小时
+      TZ: Asia/Shanghai
       DB_USERNAME: root
       DB_PASSWORD: "123456"
       REDIS_HOST: redis
@@ -18,7 +20,8 @@ services:
       RABBITMQ_USERNAME: root
       RABBITMQ_PASSWORD: "123456"
     ports:
-      - "8080:8080"
+      # 宿主端口可用 CAMPUSHUB_APP_PORT 覆盖
+      - "${CAMPUSHUB_APP_PORT:-8080}:8080"
     volumes:
       # 将 Tomcat 访问日志目录映射到项目根目录
       - ./tomcat-logs:/app/tomcat/logs
@@ -29,8 +32,16 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: 123456
       MYSQL_DATABASE: campushub
+      # TZ 让容器系统时区为东八区，time_zone=SYSTEM 随之解析为 +08:00
+      TZ: Asia/Shanghai
+    # NOW()/CURRENT_TIMESTAMP 默认值必须与应用时钟同为东八区：
+    # 容器默认 UTC 时，数据库写入的时间比 JVM 早 8 小时，超时关闭任务会把
+    # 刚下单的待付款记录直接判定为超时并回补库存
+    command: --default-time-zone=+08:00
     ports:
-      - "3307:3306"
+      # 宿主端口可用 CAMPUSHUB_MYSQL_PORT 覆盖；
+      # 默认 3307 是为了避开本机已有的 3306 MySQL，注意 application-dev.yml 要跟着改
+      - "${CAMPUSHUB_MYSQL_PORT:-3307}:3306"
     volumes:
       - campushub-mysql-data:/var/lib/mysql
 
@@ -39,7 +50,8 @@ services:
     image: redis:8-alpine
     container_name: campushub-redis
     ports:
-      - "127.0.0.1:6380:6379"
+      # 宿主端口可用 CAMPUSHUB_REDIS_PORT 覆盖
+      - "127.0.0.1:${CAMPUSHUB_REDIS_PORT:-6380}:6379"
     volumes:
       - campushub-redis-data:/data
       - ./redis-users.acl:/usr/local/etc/redis/users.acl:ro
@@ -52,8 +64,11 @@ services:
       RABBITMQ_DEFAULT_USER: root
       RABBITMQ_DEFAULT_PASS: "123456"
     ports:
-      - "127.0.0.1:5672:5672"
-      - "127.0.0.1:15672:15672"
+      # 宿主端口可用 CAMPUSHUB_RABBITMQ_PORT / CAMPUSHUB_RABBITMQ_MANAGEMENT_PORT 覆盖：
+      # 本机 5672/15672 可能已被其他项目的 broker 占用，此时用 5673/15673 起本项目的 broker，
+      # 同时把 application-dev.yml 的 RABBITMQ_PORT 指向同一个端口
+      - "127.0.0.1:${CAMPUSHUB_RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${CAMPUSHUB_RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     volumes:
       - campushub-rabbitmq-data:/var/lib/rabbitmq
 

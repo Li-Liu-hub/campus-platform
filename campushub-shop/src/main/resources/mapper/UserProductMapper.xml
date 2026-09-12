@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campushub.shop.mapper.UserProductMapper">
+
+    <update id="markPaidIfPending">
+        <!--
+          买家付款：order_status = 0 是并发胜负的唯一判据。
+          与超时任务同时发生时只有一方能改走状态，另一方影响 0 行。
+          付款时间由应用传入（不用 NOW()），保证与 purchase_time 同源时钟，
+          数据库容器时区与 JVM 不一致时也不会出现"付款早于下单"。
+        -->
+        UPDATE ch_user_product
+        SET order_status = 1,
+            payment_time = #{paymentTime}
+        WHERE user_product_id = #{userProductId}
+          AND user_id = #{userId}
+          AND order_status = 0
+    </update>
+
+    <update id="markCancelledIfPendingByUser">
+        <!-- 买家主动取消：仅限自己的、待付款的记录；已付款的不允许自行取消 -->
+        UPDATE ch_user_product
+        SET order_status = 2
+        WHERE user_product_id = #{userProductId}
+          AND user_id = #{userId}
+          AND order_status = 0
+    </update>
+
+    <update id="markCancelledIfPending">
+        <!-- 超时任务关闭：不校验买家归属，抢到状态的才需要回补库存 -->
+        UPDATE ch_user_product
+        SET order_status = 2
+        WHERE user_product_id = #{userProductId}
+          AND order_status = 0
+    </update>
+
+    <select id="selectTimeoutCandidates" resultType="com.campushub.shop.entity.UserProduct">
+        <!--
+          走 idx_status_purchase(order_status, purchase_time)；升序保证积压最久的先被处理。
+          比较列用 purchase_time（应用时钟写入）而非 create_time（数据库默认值写入），
+          与调用方算出的 deadline 同源，不受数据库容器时区影响。
+        -->
+        SELECT user_product_id,
+               user_id,
+               product_id,
+               product_number,
+               purchase_time,
+               payment_time,
+               order_status,
+               user_product_idempotency_key,
+               create_time,
+               update_time
+        FROM ch_user_product
+        WHERE order_status = 0
+          AND purchase_time &lt; #{deadline}
+        ORDER BY purchase_time ASC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

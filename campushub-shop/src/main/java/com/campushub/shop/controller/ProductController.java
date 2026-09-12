@@ -1,11 +1,13 @@
 package com.campushub.shop.controller;
 
 import com.campushub.common.response.Result;
+import com.campushub.shop.dto.PendingPurchaseQueryRequest;
 import com.campushub.shop.dto.ProductCreateRequest;
 import com.campushub.shop.dto.ProductQueryRequest;
 import com.campushub.shop.dto.ProductUpdateRequest;
 import com.campushub.shop.service.ProductService;
 import com.campushub.shop.vo.PageVO;
+import com.campushub.shop.vo.PendingPurchaseVO;
 import com.campushub.shop.vo.ProductVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -57,5 +59,13 @@ public class ProductController {
     public Result<Void> delete(@PathVariable Long productId) {
         productService.delete(productId);
         return Result.success();
+    }
+
+    /** 卖家查看该商品当前待付款的购买记录，仅该商品所属店铺的店主可查。 */
+    @GetMapping("/{productId}/pending-purchases")
+    public Result<PageVO<PendingPurchaseVO>> listPendingPurchases(
+            @PathVariable Long productId,
+            @Valid @ModelAttribute PendingPurchaseQueryRequest request) {
+        return Result.success(productService.listPendingPurchases(productId, request));
     }
 }

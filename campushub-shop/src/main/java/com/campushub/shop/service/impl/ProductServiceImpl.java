@@ -5,15 +5,23 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.campushub.common.exception.BusinessException;
 import com.campushub.common.exception.ErrorCode;
 import com.campushub.infrastructure.security.AuthenticationService;
+import com.campushub.shop.config.ShopPurchaseProperties;
+import com.campushub.shop.constant.ProductDisplayState;
+import com.campushub.shop.constant.ProductStatuses;
+import com.campushub.shop.constant.PurchaseStatuses;
+import com.campushub.shop.dto.PendingPurchaseQueryRequest;
 import com.campushub.shop.dto.ProductCreateRequest;
 import com.campushub.shop.dto.ProductQueryRequest;
 import com.campushub.shop.dto.ProductUpdateRequest;
 import com.campushub.shop.entity.Product;
 import com.campushub.shop.entity.Shop;
+import com.campushub.shop.entity.UserProduct;
 import com.campushub.shop.mapper.ProductMapper;
 import com.campushub.shop.mapper.ShopMapper;
+import com.campushub.shop.mapper.UserProductMapper;
 import com.campushub.shop.service.ProductService;
 import com.campushub.shop.vo.PageVO;
+import com.campushub.shop.vo.PendingPurchaseVO;
 import com.campushub.shop.vo.ProductVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
@@ -32,6 +40,10 @@ public class ProductServiceImpl implements ProductService {
 
     private final ShopMapper shopMapper;
 
+    private final UserProductMapper userProductMapper;
+
+    private final ShopPurchaseProperties shopPurchaseProperties;
+
     private final AuthenticationService authenticationService;
 
     /** 游标分页默认页大小。 */
@@ -39,9 +51,6 @@ public class ProductServiceImpl implements ProductService {
 
     /** 游标分页最大页大小。 */
     private static final int MAX_PAGE_SIZE = 100;
-
-    /** 商品上架状态。 */
-    private static final int STATUS_ON_SHELF = 1;
 
     /** 在当前登录用户自己的店铺下创建商品，幂等由数据库唯一键保证；重复提交时返回已存在的原商品。 */
     @Override
@@ -53,7 +62,7 @@ public class ProductServiceImpl implements ProductService {
         product.setProductName(request.productName().trim());
         product.setProductPrice(request.productPrice());
         product.setProductStock(request.productStock());
-        product.setProductStatus(STATUS_ON_SHELF);
+        product.setProductStatus(ProductStatuses.ON_SHELF);
         product.setProductIdempotencyKey(idempotencyKey);
         product.setProductIsDelete(0);
         try {
@@ -101,14 +110,16 @@ public class ProductServiceImpl implements ProductService {
      * 功能：修改自己店铺下的商品，商品名称、价格、上架状态按传入值更新，库存只按调整量增减。
      *
      * <p>库存刻意不走字段覆盖：这里查出来的商品实体带着读取时刻的库存快照，若直接整体
-     * updateById，就会把快照之后并发下单已经扣掉的库存又写回去，造成可售数量大于实际库存。
-     * 所以先构造只含待改字段的实体（库存字段留空，MyBatis-Plus 默认策略不会写入该列），
-     * 再用条件更新按调整量增减库存。整段操作在同一事务内，库存调整失败会连带回滚字段修改。
+     * updateById，就会把快照之后并发下单已经冻结掉的库存又写回去，造成可售数量大于实际库存。
+     * 所以先构造只含待改字段的实体（两个库存字段都留空，MyBatis-Plus 默认策略不会写入这两列），
+     * 再用条件更新按调整量增减可卖量。整段操作在同一事务内，库存调整失败会连带回滚字段修改。
+     *
+     * <p>卖家只能调可卖量，碰不到冻结量：冻结量是系统占用，卖家能改就会破坏账目一致性。
      *
      * @param productId 商品 ID，必须属于当前登录用户的店铺
-     * @param request 修改请求，含名称、价格、上架状态与库存调整量（正数补货、负数减库、0 表示不调整）
+     * @param request 修改请求，含名称、价格、上架状态与可卖量调整量（正数补货、负数减库、0 表示不调整）
      * @return 修改后的商品信息
-     * @throws BusinessException 商品不存在抛 404，不属于自己抛 403，库存减少量超过当前库存抛 409
+     * @throws BusinessException 商品不存在抛 404，不属于自己抛 403，库存减少量超过当前可卖量抛 409
      */
     @Override
     @Transactional
@@ -128,12 +139,59 @@ public class ProductServiceImpl implements ProductService {
         return getById(productId);
     }
 
-    /** 软删除自己店铺下的商品。 */
+    /**
+     * 功能：软删除自己店铺下的商品。
+     *
+     * <p>删除前必须确认没有待付款的购买记录：那些记录占着该商品的冻结库存，商品一旦软删除
+     * 就从查询里消失，冻结量却还挂在它身上，账目再也无法收敛（卖家看不到、买家也不一定找得回）。
+     * 正确做法是等买家付款、买家取消，或等超时任务把记录关掉并回补库存之后再删。
+     *
+     * @param productId 商品 ID，必须属于当前登录用户的店铺，且没有待付款购买记录
+     * @throws BusinessException 商品不存在抛 404，不属于自己抛 403，存在待付款记录抛 409
+     */
     @Override
     public void delete(Long productId) {
         Product product = requireOwnedProduct(productId);
+        Long pendingCount = userProductMapper.selectCount(Wrappers.<UserProduct>lambdaQuery()
+                .eq(UserProduct::getProductId, product.getProductId())
+                .eq(UserProduct::getOrderStatus, PurchaseStatuses.PENDING_PAYMENT));
+        if (pendingCount != null && pendingCount > 0) {
+            throw new BusinessException(ErrorCode.CONFLICT, "该商品还有待付款的购买记录，请先等待付款或超时关闭后再删除");
+        }
         // @TableLogic 使 deleteById 生成为 UPDATE product_is_delete = 1
         productMapper.deleteById(product.getProductId());
+    }
+
+    /**
+     * 功能：卖家查看某商品当前待付款的购买记录，按创建时间倒序游标分页。
+     *
+     * <p>权限边界是"商品所属店铺的店主"，而不是"任意登录用户"：待付款名单带买家身份，
+     * 只有该商品的卖家有知情需要。返回内容只含交易必要字段（买家 ID、数量、下单时间、
+     * 超时时刻），不暴露联系方式，避免接口成为买家信息的批量出口。
+     *
+     * @param productId 商品 ID，必须属于当前登录用户的店铺
+     * @param request 游标分页参数，首页不传游标
+     * @return 待付款记录分页结果，超时时刻为下单时间加上配置的超时时长
+     * @throws BusinessException 商品不存在抛 404，不属于当前用户抛 403
+     */
+    @Override
+    public PageVO<PendingPurchaseVO> listPendingPurchases(Long productId, PendingPurchaseQueryRequest request) {
+        requireOwnedProduct(productId);
+        int pageSize = resolvePageSize(request.pageSize());
+        LambdaQueryWrapper<UserProduct> wrapper = Wrappers.<UserProduct>lambdaQuery()
+                .eq(UserProduct::getProductId, productId)
+                .eq(UserProduct::getOrderStatus, PurchaseStatuses.PENDING_PAYMENT);
+        applyPendingCursor(wrapper, request.cursorTime(), request.cursorId());
+        wrapper.orderByDesc(UserProduct::getCreateTime).orderByDesc(UserProduct::getUserProductId)
+                .last("LIMIT " + pageSize);
+        List<UserProduct> records = userProductMapper.selectList(wrapper);
+        List<PendingPurchaseVO> list = records.stream().map(this::toPendingPurchaseVO).toList();
+        if (list.size() < pageSize) {
+            return new PageVO<>(list, false, null, null);
+        }
+        // 取满一页说明可能还有更多数据，最后一行即下一页游标
+        UserProduct lastRecord = records.get(records.size() - 1);
+        return new PageVO<>(list, true, lastRecord.getCreateTime(), lastRecord.getUserProductId());
     }
 
     /** 根据商品 ID 查询未删除商品，商品不存在时抛出 404 业务异常。 */
@@ -192,7 +250,7 @@ public class ProductServiceImpl implements ProductService {
         return userId;
     }
 
-    /** 将商品实体转换为接口返回对象。 */
+    /** 将商品实体转换为接口返回对象，展示态由两个库存量与上架状态现算得出，不落库。 */
     private ProductVO toProductVO(Product product) {
         return new ProductVO(
                 product.getProductId(),
@@ -200,9 +258,26 @@ public class ProductServiceImpl implements ProductService {
                 product.getProductName(),
                 product.getProductPrice(),
                 product.getProductStock(),
+                product.getProductStockLocked(),
                 product.getProductStatus(),
+                ProductDisplayState.derive(product.getProductStock(), product.getProductStockLocked(),
+                        product.getProductStatus()),
                 product.getProductIdempotencyKey(),
                 product.getCreateTime()
+        );
+    }
+
+    /** 将待付款记录转换为卖家视角的返回对象，超时时刻按下单时间加配置的超时时长算出。 */
+    private PendingPurchaseVO toPendingPurchaseVO(UserProduct record) {
+        LocalDateTime purchaseTime = record.getPurchaseTime();
+        LocalDateTime expireTime = purchaseTime == null
+                ? null
+                : purchaseTime.plusMinutes(shopPurchaseProperties.getOrderTimeoutMinutes());
+        return new PendingPurchaseVO(
+                record.getUserId(),
+                record.getProductNumber(),
+                purchaseTime,
+                expireTime
         );
     }
 
@@ -213,5 +288,14 @@ public class ProductServiceImpl implements ProductService {
         }
         wrapper.and(w -> w.lt(Product::getCreateTime, cursorTime)
                 .or(o -> o.eq(Product::getCreateTime, cursorTime).lt(Product::getProductId, cursorId)));
+    }
+
+    /** 追加游标条件：按 (create_time, user_product_id) 倒序定位上一页末行之后。 */
+    private void applyPendingCursor(LambdaQueryWrapper<UserProduct> wrapper, LocalDateTime cursorTime, Long cursorId) {
+        if (cursorTime == null || cursorId == null) {
+            return;
+        }
+        wrapper.and(w -> w.lt(UserProduct::getCreateTime, cursorTime)
+                .or(o -> o.eq(UserProduct::getCreateTime, cursorTime).lt(UserProduct::getUserProductId, cursorId)));
     }
 }

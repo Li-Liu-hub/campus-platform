@@ -34,15 +34,15 @@ public class UserProduct {
     @TableField("purchase_time")
     private LocalDateTime purchaseTime;
 
-    /** 预约付款时间，未预约时为空。 */
+    /** 付款时间，付款成功时回填；未付款时为空。 */
     @TableField("payment_time")
     private LocalDateTime paymentTime;
 
-    /** 订单状态：0 待付款，1 已付款，2 已取消。 */
+    /** 购买记录状态：0 待付款，1 已付款，2 已取消。 */
     @TableField("order_status")
     private Integer orderStatus;
 
-    /** 下单幂等键，由前端每次提交时生成并传递，唯一索引兜底防止重复下单重复扣库存。 */
+    /** 下单幂等键，由前端每次提交时生成并传递，唯一索引兜底防止重复下单重复冻结库存。 */
     @TableField("user_product_idempotency_key")
     private String userProductIdempotencyKey;
 

@@ -42,3 +42,12 @@ spring:
           max-attempts: 3
           initial-interval: 1s
           multiplier: 2
+
+campushub:
+  shop:
+    # 待付款购买记录的存活时长（分钟）：超时后由定时任务关闭并把冻结库存回补到可卖量
+    order-timeout-minutes: ${SHOP_ORDER_TIMEOUT_MINUTES:15}
+    # 超时扫描单批最多处理的记录数
+    timeout-batch-size: ${SHOP_TIMEOUT_BATCH_SIZE:200}
+    # 超时扫描间隔（毫秒）
+    timeout-scan-interval-ms: ${SHOP_TIMEOUT_SCAN_INTERVAL_MS:60000}

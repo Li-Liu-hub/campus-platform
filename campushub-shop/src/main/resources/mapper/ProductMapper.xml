@@ -4,12 +4,35 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.campushub.shop.mapper.ProductMapper">
 
-    <update id="deductStock">
-        <!-- 下单扣库存：条件更新保证库存充足才扣，影响行数 0 表示并发下已被抢空 -->
+    <update id="freezeStock">
+        <!--
+          下单冻结：一条语句同时改两列，不留"可卖已减、冻结未加"的中间态。
+          product_status = 1 是并发防线：校验与冻结之间若卖家下架，这里会拦住；
+          product_stock >= #{number} 保证可卖量充足，影响行数 0 即抢空或已下架。
+        -->
         UPDATE ch_product
-        SET product_stock = product_stock - #{number}
+        SET product_stock        = product_stock - #{number},
+            product_stock_locked = product_stock_locked + #{number}
         WHERE product_id = #{productId}
+          AND product_status = 1
           AND product_stock >= #{number}
+    </update>
+
+    <update id="consumeLockedStock">
+        <!-- 付款消耗冻结量：只减冻结列，不回补可卖量（货已卖掉，是消耗不是归还） -->
+        UPDATE ch_product
+        SET product_stock_locked = product_stock_locked - #{number}
+        WHERE product_id = #{productId}
+          AND product_stock_locked >= #{number}
+    </update>
+
+    <update id="releaseLockedStock">
+        <!-- 取消或超时解冻：冻结量减、可卖量加，占用还回可卖池 -->
+        UPDATE ch_product
+        SET product_stock_locked = product_stock_locked - #{number},
+            product_stock        = product_stock + #{number}
+        WHERE product_id = #{productId}
+          AND product_stock_locked >= #{number}
     </update>
 
     <update id="adjustStock">

@@ -25,10 +25,22 @@ public class UserProductController {
 
     private final UserProductService userProductService;
 
-    /** 下单：校验商品在售并扣减库存后创建购买记录。 */
+    /** 下单：校验商品在售并冻结库存后创建待付款的购买记录。 */
     @PostMapping("/create")
     public Result<UserProductVO> create(@Valid @RequestBody UserProductCreateRequest request) {
         return Result.success(userProductService.create(request));
+    }
+
+    /** 付款：把待付款记录置为已付款并消耗冻结库存。 */
+    @PostMapping("/pay/{userProductId}")
+    public Result<UserProductVO> pay(@PathVariable Long userProductId) {
+        return Result.success(userProductService.pay(userProductId));
+    }
+
+    /** 取消：把待付款记录置为已取消并把冻结库存回补到可卖量。 */
+    @PostMapping("/cancel/{userProductId}")
+    public Result<UserProductVO> cancel(@PathVariable Long userProductId) {
+        return Result.success(userProductService.cancel(userProductId));
     }
 
     /** 游标分页查询当前登录用户自己的购买记录，翻页时传上一页返回的游标二元组。 */
@@ -43,7 +55,7 @@ public class UserProductController {
         return Result.success(userProductService.getById(userProductId));
     }
 
-    /** 物理删除当前登录用户自己的购买记录。 */
+    /** 物理删除当前登录用户自己的购买记录，待付款记录须先取消。 */
     @DeleteMapping("/delete/{userProductId}")
     public Result<Void> delete(@PathVariable Long userProductId) {
         userProductService.delete(userProductId);
