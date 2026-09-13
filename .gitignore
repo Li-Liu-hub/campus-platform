@@ -25,3 +25,5 @@ work/
 .workbuddy/
 logs/
 *.drawio
+# 本地上传的图片（存储根目录）
+uploads/

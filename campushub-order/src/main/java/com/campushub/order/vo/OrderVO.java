@@ -2,6 +2,7 @@ package com.campushub.order.vo;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /** 订单接口返回对象。 */
 public record OrderVO(
@@ -12,6 +13,7 @@ public record OrderVO(
         BigDecimal orderAmount,
         Integer orderStatus,
         LocalDateTime orderTimeout,
+        List<String> imageUrls,
         Long orderViewNumber,
         LocalDateTime createTime,
         LocalDateTime updateTime

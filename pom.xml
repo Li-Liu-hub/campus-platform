@@ -35,6 +35,7 @@
         <module>campushub-order</module>
         <module>campushub-shop</module>
         <module>campushub-message</module>
+        <module>campushub-notification</module>
         <module>campushub-web</module>
     </modules>
 
@@ -83,6 +84,11 @@
             <dependency>
                 <groupId>com.campushub</groupId>
                 <artifactId>campushub-message</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.campushub</groupId>
+                <artifactId>campushub-notification</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

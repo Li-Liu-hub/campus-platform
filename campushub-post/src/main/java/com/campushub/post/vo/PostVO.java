@@ -1,6 +1,7 @@
 package com.campushub.post.vo;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /** 帖子接口返回对象。 */
 public record PostVO(
@@ -9,6 +10,7 @@ public record PostVO(
         String postTitle,
         String postType,
         String postText,
+        List<String> imageUrls,
         String postIdempotencyKey,
         Long postViewNumber,
         LocalDateTime createTime,

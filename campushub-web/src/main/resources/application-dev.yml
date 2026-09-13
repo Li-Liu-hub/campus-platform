@@ -4,6 +4,11 @@ spring:
     scheduling:
       pool:
         size: 4
+  servlet:
+    multipart:
+      # 图片上传上限：单文件 5MB、单请求 10MB
+      max-file-size: 5MB
+      max-request-size: 10MB
   datasource:
     # 端口 3307 对应 docker-compose 里 mysql 的 "3307:3306" 映射——刻意避开本机可能已有的 3306 MySQL，
     # 改动 compose 的 CAMPUSHUB_MYSQL_PORT 时这里要同步；需要连别的库用 DB_URL 覆盖
@@ -72,6 +77,12 @@ server:
       pattern: "%t %r %s %Dms"
 
 campushub:
+  storage:
+    local:
+      # 图片本地存储根目录（当前存储实现为本地磁盘；接入 OSS 时替换实现类即可，URL 体系不变）
+      root-dir: ${STORAGE_ROOT_DIR:./uploads}
+      # 图片访问 URL 前缀，由 web 层静态资源映射承接
+      url-prefix: /files
   shop:
     # 待付款购买记录的存活时长（分钟）：超时后由定时任务关闭并把冻结库存回补到可卖量。
     # 本地验证该功能时可临时调成 5，不用等满 15 分钟。

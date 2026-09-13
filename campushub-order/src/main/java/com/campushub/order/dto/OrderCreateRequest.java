@@ -10,6 +10,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /** 新增订单请求参数。 */
 public record OrderCreateRequest(
@@ -26,6 +27,11 @@ public record OrderCreateRequest(
         @Future(message = "最晚支付时间必须晚于当前时间")
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
         LocalDateTime orderTimeout,
+
+        /** 图片地址列表（先经 /api/v1/files/upload 上传得到），最多 9 张，可为空 */
+        @Size(max = 9, message = "单订单最多携带 9 张图片")
+        List<@NotBlank(message = "图片地址不能为空")
+             @Size(max = 512, message = "图片地址长度不能超过 512 个字符") String> imageUrls,
 
         @NotBlank(message = "订单幂等键不能为空")
         @Size(max = 64, message = "订单幂等键长度不能超过 64 个字符")

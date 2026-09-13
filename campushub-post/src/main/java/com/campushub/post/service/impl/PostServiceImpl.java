@@ -17,7 +17,9 @@ import com.campushub.post.dto.PostCreateRequest;
 import com.campushub.post.dto.PostQueryRequest;
 import com.campushub.post.dto.PostUpdateRequest;
 import com.campushub.post.entity.Post;
+import com.campushub.post.entity.PostImage;
 import com.campushub.post.entity.PostView;
+import com.campushub.post.mapper.PostImageMapper;
 import com.campushub.post.mapper.PostMapper;
 import com.campushub.post.mapper.PostViewMapper;
 import com.campushub.post.service.PostService;
@@ -29,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StopWatch;
 
 import java.time.Duration;
@@ -44,6 +47,8 @@ public class PostServiceImpl implements PostService {
     private final PostMapper postMapper;
 
     private final PostViewMapper postViewMapper;
+
+    private final PostImageMapper postImageMapper;
 
     private final AuthenticationService authenticationService;
 
@@ -78,6 +83,7 @@ public class PostServiceImpl implements PostService {
 
     /** 直接插入创建当前登录用户的帖子，幂等由数据库唯一键保证；重复提交时返回已存在的原帖子。 */
     @Override
+    @Transactional
     public PostVO create(PostCreateRequest request) {
         Long userId = requireCurrentUserId();
         String idempotencyKey = request.postIdempotencyKey().trim();
@@ -91,6 +97,8 @@ public class PostServiceImpl implements PostService {
         post.setPostIsDelete(0);
         try {
             postMapper.insert(post);
+            // 帖子唯一键先落位、图片后插入：重复提交撞键时不会插图片，帖子幂等是图片幂等的前置闸门
+            insertImages(post.getPostId(), request.imageUrls());
             // 新帖落地即清除可能残留的空值占位，保证立即可查
             evictCache(post.getPostId());
         } catch (DuplicateKeyException exception) {
@@ -102,7 +110,7 @@ public class PostServiceImpl implements PostService {
             if (existingPost == null) {
                 throw new BusinessException(ErrorCode.CONFLICT, "帖子幂等键已被使用");
             }
-            return toPostVO(existingPost);
+            return toPostVO(existingPost, loadImageUrls(existingPost.getPostId()));
         }
         return getById(post.getPostId());
     }
@@ -204,12 +212,15 @@ public class PostServiceImpl implements PostService {
      */
     @OperationLog(type = OperationTypes.POST_UPDATE, targetId = "#args[0]")
     @Override
+    @Transactional
     public PostVO update(Long postId, PostUpdateRequest request) {
         Post post = requireOwnedPost(postId);
         post.setPostTitle(request.postTitle().trim());
         post.setPostType(normalizePostType(request.postType(), true));
         post.setPostText(request.postText());
         postMapper.updateById(post);
+        // 图片“传才改”：null 不改动、空列表清空、非空全量替换
+        replaceImages(postId, request.imageUrls());
         evictCache(postId);
         publishDelayEvict(postId);
         return getById(postId);
@@ -306,7 +317,7 @@ public class PostServiceImpl implements PostService {
             writeNullCache(cacheKey);
             throw new BusinessException(ErrorCode.NOT_FOUND, "帖子不存在");
         }
-        PostVO postVO = toPostVO(post);
+        PostVO postVO = toPostVO(post, loadImageUrls(postId));
         writeCache(cacheKey, postVO);
         return postVO;
     }
@@ -340,6 +351,41 @@ public class PostServiceImpl implements PostService {
         }
     }
 
+    /** 逐张插入帖子图片，sort 按提交顺序从 0 递增。 */
+    private void insertImages(Long postId, List<String> imageUrls) {
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            return;
+        }
+        int sort = 0;
+        for (String imageUrl : imageUrls) {
+            PostImage image = new PostImage();
+            image.setPostImagePostId(postId);
+            image.setPostImageUrl(imageUrl);
+            image.setPostImageSort(sort++);
+            postImageMapper.insert(image);
+        }
+    }
+
+    /** 全量替换帖子图片：null 不改动、空列表清空、非空删旧插新。 */
+    private void replaceImages(Long postId, List<String> imageUrls) {
+        if (imageUrls == null) {
+            return;
+        }
+        postImageMapper.delete(Wrappers.<PostImage>lambdaQuery()
+                .eq(PostImage::getPostImagePostId, postId));
+        insertImages(postId, imageUrls);
+    }
+
+    /** 查询帖子图片地址，按展示顺序升序。 */
+    private List<String> loadImageUrls(Long postId) {
+        return postImageMapper.selectList(Wrappers.<PostImage>lambdaQuery()
+                        .eq(PostImage::getPostImagePostId, postId)
+                        .orderByAsc(PostImage::getPostImageSort))
+                .stream()
+                .map(PostImage::getPostImageUrl)
+                .toList();
+    }
+
     /** 获取当前登录用户 ID，登录状态失效时抛出 401 业务异常。 */
     private Long requireCurrentUserId() {
         Long userId = authenticationService.getCurrentUserId();
@@ -364,14 +410,15 @@ public class PostServiceImpl implements PostService {
         return normalized;
     }
 
-    /** 将帖子实体转换为接口返回对象。 */
-    private PostVO toPostVO(Post post) {
+    /** 将帖子实体转换为接口返回对象，图片单独装载。 */
+    private PostVO toPostVO(Post post, List<String> imageUrls) {
         return new PostVO(
                 post.getPostId(),
                 post.getPostUserId(),
                 post.getPostTitle(),
                 post.getPostType(),
                 post.getPostText(),
+                imageUrls,
                 post.getPostIdempotencyKey(),
                 post.getPostViewNumber(),
                 post.getCreateTime(),

@@ -21,6 +21,11 @@
             <groupId>com.campushub</groupId>
             <artifactId>campushub-infrastructure</artifactId>
         </dependency>
+        <!-- 关注成功时创建站内通知 -->
+        <dependency>
+            <groupId>com.campushub</groupId>
+            <artifactId>campushub-notification</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>

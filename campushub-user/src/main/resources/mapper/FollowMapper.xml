@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campushub.user.mapper.FollowMapper">
+
+    <select id="selectFollowing" resultType="com.campushub.user.vo.FollowUserVO">
+        <!-- 我关注的人：JOIN 取对方昵称与签名，已注销用户（user_is_delete=1）不占列表位 -->
+        SELECT u.user_id,
+               u.user_nickname,
+               u.user_personal_signature,
+               f.create_time AS follow_time,
+               f.follow_id
+        FROM ch_follow f
+        JOIN ch_user u
+              ON u.user_id = f.follow_receive_user_id
+             AND u.user_is_delete = 0
+        WHERE f.follow_sent_user_id = #{userId}
+        <if test="cursorTime != null and cursorId != null">
+            <!-- 游标：从上一页末行的 (create_time, follow_id) 接着往下找 -->
+            AND (f.create_time &lt; #{cursorTime}
+                OR (f.create_time = #{cursorTime} AND f.follow_id &lt; #{cursorId}))
+        </if>
+        ORDER BY f.create_time DESC, f.follow_id DESC
+        LIMIT #{pageSize}
+    </select>
+
+    <select id="selectFollowers" resultType="com.campushub.user.vo.FollowUserVO">
+        <!-- 关注我的人：JOIN 取对方昵称与签名，已注销用户不占列表位 -->
+        SELECT u.user_id,
+               u.user_nickname,
+               u.user_personal_signature,
+               f.create_time AS follow_time,
+               f.follow_id
+        FROM ch_follow f
+        JOIN ch_user u
+              ON u.user_id = f.follow_sent_user_id
+             AND u.user_is_delete = 0
+        WHERE f.follow_receive_user_id = #{userId}
+        <if test="cursorTime != null and cursorId != null">
+            <!-- 游标：从上一页末行的 (create_time, follow_id) 接着往下找 -->
+            AND (f.create_time &lt; #{cursorTime}
+                OR (f.create_time = #{cursorTime} AND f.follow_id &lt; #{cursorId}))
+        </if>
+        ORDER BY f.create_time DESC, f.follow_id DESC
+        LIMIT #{pageSize}
+    </select>
+
+</mapper>

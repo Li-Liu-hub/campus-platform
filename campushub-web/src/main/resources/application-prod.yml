@@ -4,6 +4,11 @@ spring:
     scheduling:
       pool:
         size: 4
+  servlet:
+    multipart:
+      # 图片上传上限：单文件 5MB、单请求 10MB
+      max-file-size: 5MB
+      max-request-size: 10MB
   datasource:
     url: ${DB_URL:jdbc:mysql://mysql:3306/campushub?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:root}
@@ -44,6 +49,12 @@ spring:
           multiplier: 2
 
 campushub:
+  storage:
+    local:
+      # 图片本地存储根目录（当前存储实现为本地磁盘；接入 OSS 时替换实现类即可）
+      root-dir: ${STORAGE_ROOT_DIR:./uploads}
+      # 图片访问 URL 前缀，由 web 层静态资源映射承接
+      url-prefix: /files
   shop:
     # 待付款购买记录的存活时长（分钟）：超时后由定时任务关闭并把冻结库存回补到可卖量
     order-timeout-minutes: ${SHOP_ORDER_TIMEOUT_MINUTES:15}

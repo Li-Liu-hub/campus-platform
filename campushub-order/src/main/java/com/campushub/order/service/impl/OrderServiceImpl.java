@@ -13,6 +13,8 @@ import com.campushub.order.dto.OrderCreateRequest;
 import com.campushub.order.dto.OrderQueryRequest;
 import com.campushub.order.dto.OrderUpdateRequest;
 import com.campushub.order.entity.Order;
+import com.campushub.order.entity.OrderImage;
+import com.campushub.order.mapper.OrderImageMapper;
 import com.campushub.order.mapper.OrderMapper;
 import com.campushub.order.service.OrderService;
 import com.campushub.order.vo.OrderPageVO;
@@ -21,10 +23,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** 订单基础业务实现：增删改查 + 分布式锁抢单。 */
 @Slf4j
@@ -33,6 +38,8 @@ import java.util.UUID;
 public class OrderServiceImpl implements OrderService {
 
     private final OrderMapper orderMapper;
+
+    private final OrderImageMapper orderImageMapper;
 
     private final AuthenticationService authenticationService;
 
@@ -52,6 +59,7 @@ public class OrderServiceImpl implements OrderService {
 
     /** 直接插入创建当前登录用户发布的订单，幂等由数据库唯一键保证；重复提交时返回已存在的原订单。 */
     @Override
+    @Transactional
     public OrderVO create(OrderCreateRequest request) {
         Long userId = requireCurrentUserId();
         String idempotencyKey = request.orderIdempotencyKey().trim();
@@ -66,6 +74,8 @@ public class OrderServiceImpl implements OrderService {
         order.setOrderIsDelete(0);
         try {
             orderMapper.insert(order);
+            // 订单唯一键先落位、图片后插入：重复提交撞键时不会插图片，订单幂等是图片幂等的前置闸门
+            insertImages(order.getOrderId(), request.imageUrls());
         } catch (DuplicateKeyException exception) {
             // 唯一键冲突说明同一幂等键已插入成功，直接返回已存在的订单；查不到说明命中的是已软删除的订单
             Order existingOrder = orderMapper.selectOne(Wrappers.<Order>lambdaQuery()
@@ -75,7 +85,7 @@ public class OrderServiceImpl implements OrderService {
             if (existingOrder == null) {
                 throw new BusinessException(ErrorCode.CONFLICT, "订单幂等键已被使用");
             }
-            return toOrderVO(existingOrder);
+            return toOrderVO(existingOrder, loadImageUrls(existingOrder.getOrderId()));
         }
         return getById(order.getOrderId());
     }
@@ -83,7 +93,8 @@ public class OrderServiceImpl implements OrderService {
     /** 查询未删除订单，订单不存在时返回 404 业务异常。 */
     @Override
     public OrderVO getById(Long orderId) {
-        return toOrderVO(requireOrder(orderId));
+        Order order = requireOrder(orderId);
+        return toOrderVO(order, loadImageUrls(orderId));
     }
 
     /**
@@ -109,12 +120,13 @@ public class OrderServiceImpl implements OrderService {
         Long userId = requireCurrentUserId();
         String role = stringOrDefault(request.role(), "sent");
         int pageSize = resolvePageSize(request.pageSize());
-        List<OrderVO> orders = orderMapper
-                .selectByCondition(role, userId, request.orderStatus(), pageSize)
-                .stream()
-                .map(this::toOrderVO)
+        List<Order> orders = orderMapper.selectByCondition(role, userId, request.orderStatus(), pageSize);
+        // 图片一次批量装载，避免逐条回查（N+1）
+        Map<Long, List<String>> imageMap = loadImageUrls(orders);
+        List<OrderVO> list = orders.stream()
+                .map(order -> toOrderVO(order, imageMap.getOrDefault(order.getOrderId(), List.of())))
                 .toList();
-        return new OrderPageVO(orders);
+        return new OrderPageVO(list);
     }
 
     /** 修改当前登录用户发布的待接单订单；条件更新兜底，订单流转后不可再修改。操作留痕由日志切面异步完成。 */
@@ -268,8 +280,46 @@ public class OrderServiceImpl implements OrderService {
         return value == null || value.isBlank() ? defaultValue : value;
     }
 
-    /** 将订单实体转换为接口返回对象。 */
-    private OrderVO toOrderVO(Order order) {
+    /** 逐张插入订单图片，sort 按提交顺序从 0 递增。 */
+    private void insertImages(Long orderId, List<String> imageUrls) {
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            return;
+        }
+        int sort = 0;
+        for (String imageUrl : imageUrls) {
+            OrderImage image = new OrderImage();
+            image.setOrderImageOrderId(orderId);
+            image.setOrderImageUrl(imageUrl);
+            image.setOrderImageSort(sort++);
+            orderImageMapper.insert(image);
+        }
+    }
+
+    /** 查询单条订单的图片地址，按展示顺序升序。 */
+    private List<String> loadImageUrls(Long orderId) {
+        return orderImageMapper.selectList(Wrappers.<OrderImage>lambdaQuery()
+                        .eq(OrderImage::getOrderImageOrderId, orderId)
+                        .orderByAsc(OrderImage::getOrderImageSort))
+                .stream()
+                .map(OrderImage::getOrderImageUrl)
+                .toList();
+    }
+
+    /** 批量查询订单图片地址，一次 IN 查询分组映射，避免逐条回查。 */
+    private Map<Long, List<String>> loadImageUrls(List<Order> orders) {
+        if (orders.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> orderIds = orders.stream().map(Order::getOrderId).toList();
+        List<OrderImage> images = orderImageMapper.selectList(Wrappers.<OrderImage>lambdaQuery()
+                .in(OrderImage::getOrderImageOrderId, orderIds)
+                .orderByAsc(OrderImage::getOrderImageSort));
+        return images.stream().collect(Collectors.groupingBy(OrderImage::getOrderImageOrderId,
+                Collectors.mapping(OrderImage::getOrderImageUrl, Collectors.toList())));
+    }
+
+    /** 将订单实体转换为接口返回对象，图片单独装载。 */
+    private OrderVO toOrderVO(Order order, List<String> imageUrls) {
         return new OrderVO(
                 order.getOrderId(),
                 order.getOrderSentUserId(),
@@ -278,6 +328,7 @@ public class OrderServiceImpl implements OrderService {
                 order.getOrderAmount(),
                 order.getOrderStatus(),
                 order.getOrderTimeout(),
+                imageUrls,
                 order.getOrderViewNumber(),
                 order.getCreateTime(),
                 order.getUpdateTime()

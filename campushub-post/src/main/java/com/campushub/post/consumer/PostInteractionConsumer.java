@@ -3,11 +3,15 @@ package com.campushub.post.consumer;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.campushub.common.mq.MqConstants;
 import com.campushub.infrastructure.redis.RedisService;
+import com.campushub.notification.constant.NotificationTypes;
+import com.campushub.notification.service.NotificationService;
 import com.campushub.post.constant.PostRedisKeys;
+import com.campushub.post.entity.Post;
 import com.campushub.post.entity.PostCollect;
 import com.campushub.post.entity.PostLike;
 import com.campushub.post.mapper.PostCollectMapper;
 import com.campushub.post.mapper.PostLikeMapper;
+import com.campushub.post.mapper.PostMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -34,7 +38,11 @@ public class PostInteractionConsumer {
 
     private final PostCollectMapper postCollectMapper;
 
+    private final PostMapper postMapper;
+
     private final RedisService redisService;
+
+    private final NotificationService notificationService;
 
     /**
      * 功能：消费帖子互动事件，按动作类型分发到对应处理逻辑。
@@ -65,6 +73,7 @@ public class PostInteractionConsumer {
             return;
         }
         accumulateDelta(PostRedisKeys.LIKE_DELTA_KEY, event.postId(), 1);
+        notifyAuthor(event, "点赞", NotificationTypes.LIKE);
     }
 
     /** 删除点赞明细，记录不存在说明重复消息，幂等丢弃；删除成功后点赞计数增量 -1。 */
@@ -92,6 +101,7 @@ public class PostInteractionConsumer {
             return;
         }
         accumulateDelta(PostRedisKeys.FAV_DELTA_KEY, event.postId(), 1);
+        notifyAuthor(event, "收藏", NotificationTypes.COLLECT);
     }
 
     /** 删除收藏明细，幂等语义与取消点赞一致；删除成功后收藏计数增量 -1。 */
@@ -104,6 +114,38 @@ public class PostInteractionConsumer {
             return;
         }
         accumulateDelta(PostRedisKeys.FAV_DELTA_KEY, event.postId(), -1);
+    }
+
+    /**
+     * 功能：给帖子作者发互动通知（自己操作自己的帖子不通知）。
+     *
+     * <p>通知失败仅记日志：明细与计数已落库，通知是提醒不是事实；抛出会触发消息重试，
+     * 而重试时明细撞唯一键会被幂等丢弃，通知也不会补发，重试无意义。
+     *
+     * @param event 互动事件
+     * @param actionName 动作中文名（点赞/收藏）
+     * @param notificationType 通知类型
+     */
+    private void notifyAuthor(PostInteractionEvent event, String actionName, String notificationType) {
+        try {
+            Post post = postMapper.selectById(event.postId());
+            if (post == null || post.getPostUserId().equals(event.userId())) {
+                return;
+            }
+            notificationService.create(post.getPostUserId(), notificationType,
+                    "你的帖子《" + abbreviate(post.getPostTitle()) + "》被" + actionName + "了");
+        } catch (Exception exception) {
+            log.warn("互动通知创建失败，postId={}，userId={}，type={}",
+                    event.postId(), event.userId(), notificationType, exception);
+        }
+    }
+
+    /** 截断过长的帖子标题，避免通知文本超长。 */
+    private String abbreviate(String title) {
+        if (title == null) {
+            return "";
+        }
+        return title.length() <= 20 ? title : title.substring(0, 20) + "…";
     }
 
     /**

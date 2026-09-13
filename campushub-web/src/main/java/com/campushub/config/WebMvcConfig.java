@@ -2,15 +2,27 @@ package com.campushub.config;
 
 import com.campushub.infrastructure.security.AuthenticationService;
 import com.campushub.web.interceptor.LoginInterceptor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-/** WebMVC 配置，统一注册 Sa-Token 登录拦截器。 */
+import java.nio.file.Paths;
+
+/** WebMVC 配置，统一注册 Sa-Token 登录拦截器与上传目录的静态资源映射。 */
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
     private final AuthenticationService authenticationService;
+
+    /** 本地上传目录（与 ObjectStorageService 本地实现同一配置项）。 */
+    @Value("${campushub.storage.local.root-dir:./uploads}")
+    private String storageRootDir;
+
+    /** 本地上传 URL 前缀。 */
+    @Value("${campushub.storage.local.url-prefix:/files}")
+    private String storageUrlPrefix;
 
     public WebMvcConfig(AuthenticationService authenticationService) {
         this.authenticationService = authenticationService;
@@ -33,7 +45,20 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/api/v1/auth/register",
                         "/error",
                         "/favicon.ico",
-                        "/ws/**"
+                        "/ws/**",
+                        "/files/**"
                 );
+    }
+
+    /**
+     * 功能：把本地上传目录映射为静态资源，使上传接口返回的 URL 可直接访问。
+     *
+     * <p>图片属于公开资源（<img> 标签无法携带 Authorization 头），因此同时在
+     * 拦截器配置中放行了 /files/**；接入 OSS 后本映射可移除。
+     */
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        String location = Paths.get(storageRootDir).toAbsolutePath().normalize().toUri().toString();
+        registry.addResourceHandler(storageUrlPrefix + "/**").addResourceLocations(location);
     }
 }
