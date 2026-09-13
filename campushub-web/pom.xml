@@ -85,6 +85,12 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!-- 接口文档读取 Javadoc：编译期由根 pom 的 scribe 处理器写入中文注释元数据，运行时由此库读取 -->
+        <dependency>
+            <groupId>com.github.therapi</groupId>
+            <artifactId>therapi-runtime-javadoc</artifactId>
+            <version>0.15.0</version>
+        </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
