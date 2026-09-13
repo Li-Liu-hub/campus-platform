@@ -78,11 +78,21 @@ server:
 
 campushub:
   storage:
+    # 存储后端：local=本地磁盘（默认）；oss=阿里云 OSS（凭据必须经环境变量注入，严禁写入本文件）
+    type: ${STORAGE_TYPE:local}
     local:
-      # 图片本地存储根目录（当前存储实现为本地磁盘；接入 OSS 时替换实现类即可，URL 体系不变）
+      # 图片本地存储根目录（type=local 时生效）
       root-dir: ${STORAGE_ROOT_DIR:./uploads}
       # 图片访问 URL 前缀，由 web 层静态资源映射承接
       url-prefix: /files
+    oss:
+      # 阿里云 OSS：凭据经 ALIYUN_OSS_* 环境变量注入（存放于不入库的本地启动脚本），本文件只留占位符
+      endpoint: ${ALIYUN_OSS_ENDPOINT:}
+      bucket: ${ALIYUN_OSS_BUCKET:}
+      access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
+      access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
+      # 访问前缀：留空时默认 https://{bucket}.{endpoint}；绑定自定义域名/CDN 时在此覆盖
+      url-prefix: ${ALIYUN_OSS_URL_PREFIX:}
   shop:
     # 待付款购买记录的存活时长（分钟）：超时后由定时任务关闭并把冻结库存回补到可卖量。
     # 本地验证该功能时可临时调成 5，不用等满 15 分钟。

@@ -64,6 +64,12 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!-- 对象存储：阿里云 OSS 实现（存储后端可经配置在本地与 OSS 间切换） -->
+        <dependency>
+            <groupId>com.aliyun.oss</groupId>
+            <artifactId>aliyun-sdk-oss</artifactId>
+            <version>3.18.1</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
