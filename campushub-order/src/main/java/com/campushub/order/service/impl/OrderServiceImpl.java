@@ -78,14 +78,16 @@ public class OrderServiceImpl implements OrderService {
             insertImages(order.getOrderId(), request.imageUrls());
         } catch (DuplicateKeyException exception) {
             // 唯一键冲突说明同一幂等键已插入成功，直接返回已存在的订单；查不到说明命中的是已软删除的订单
+            // 锁定读（当前读）：普通 SELECT 受 REPEATABLE READ 快照限制，可能读不到并发赢家刚提交的记录而误报 409；
+            // FOR SHARE 与唯一键冲突残留的 S 锁兼容，多个并发输家不会互相升级成 X 锁死锁
             Order existingOrder = orderMapper.selectOne(Wrappers.<Order>lambdaQuery()
                     .eq(Order::getOrderSentUserId, userId)
                     .eq(Order::getOrderIdempotencyKey, idempotencyKey)
-                    .last("LIMIT 1"));
+                    .last("LIMIT 1 FOR SHARE"));
             if (existingOrder == null) {
                 throw new BusinessException(ErrorCode.CONFLICT, "订单幂等键已被使用");
             }
-            return toOrderVO(existingOrder, loadImageUrls(existingOrder.getOrderId()));
+            return toOrderVO(existingOrder, loadImageUrlsForIdempotent(existingOrder.getOrderId()));
         }
         return getById(order.getOrderId());
     }
@@ -300,6 +302,17 @@ public class OrderServiceImpl implements OrderService {
         return orderImageMapper.selectList(Wrappers.<OrderImage>lambdaQuery()
                         .eq(OrderImage::getOrderImageOrderId, orderId)
                         .orderByAsc(OrderImage::getOrderImageSort))
+                .stream()
+                .map(OrderImage::getOrderImageUrl)
+                .toList();
+    }
+
+    /** 幂等回查专用：锁定读装载订单图片，避免 REPEATABLE READ 快照漏掉并发赢家刚插入的图片行。 */
+    private List<String> loadImageUrlsForIdempotent(Long orderId) {
+        return orderImageMapper.selectList(Wrappers.<OrderImage>lambdaQuery()
+                        .eq(OrderImage::getOrderImageOrderId, orderId)
+                        .orderByAsc(OrderImage::getOrderImageSort)
+                        .last("FOR SHARE"))
                 .stream()
                 .map(OrderImage::getOrderImageUrl)
                 .toList();

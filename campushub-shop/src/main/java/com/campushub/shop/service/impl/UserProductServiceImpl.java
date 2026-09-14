@@ -78,10 +78,12 @@ public class UserProductServiceImpl implements UserProductService {
             userProductMapper.insert(userProduct);
         } catch (DuplicateKeyException exception) {
             // 唯一键冲突说明同一幂等键已下单成功，直接返回原记录，此时尚未冻结库存，不会重复冻结
+            // 锁定读（当前读）：普通 SELECT 受 REPEATABLE READ 快照限制，可能读不到并发赢家刚提交的记录而误报 409；
+            // FOR SHARE 与唯一键冲突残留的 S 锁兼容，多个并发输家不会互相升级成 X 锁死锁
             UserProduct existingRecord = userProductMapper.selectOne(Wrappers.<UserProduct>lambdaQuery()
                     .eq(UserProduct::getUserId, userId)
                     .eq(UserProduct::getUserProductIdempotencyKey, idempotencyKey)
-                    .last("LIMIT 1"));
+                    .last("LIMIT 1 FOR SHARE"));
             if (existingRecord == null) {
                 throw new BusinessException(ErrorCode.CONFLICT, "下单幂等键已被使用");
             }

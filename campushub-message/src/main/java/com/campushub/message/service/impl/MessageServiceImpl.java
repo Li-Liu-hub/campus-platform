@@ -104,13 +104,15 @@ public class MessageServiceImpl implements MessageService {
             messageMapper.insert(message);
         } catch (DuplicateKeyException exception) {
             // 唯一键冲突：重复提交，回查原消息；图片已在首次插入时落库，此处绝不重插
+            // 锁定读（当前读）：普通 SELECT 受 REPEATABLE READ 快照限制，可能读不到并发赢家刚提交的记录而误报 409；
+            // FOR SHARE 与唯一键冲突残留的 S 锁兼容，多个并发输家不会互相升级成 X 锁死锁
             Message existing = messageMapper.selectOne(Wrappers.<Message>lambdaQuery()
                     .eq(Message::getMessageIdempotencyKey, message.getMessageIdempotencyKey())
-                    .last("LIMIT 1"));
+                    .last("LIMIT 1 FOR SHARE"));
             if (existing == null || !existing.getMessageSendUserId().equals(userId)) {
                 throw new BusinessException(ErrorCode.CONFLICT, "消息幂等键已被使用");
             }
-            return toMessageVO(existing, loadImageUrls(existing.getMessageId()));
+            return toMessageVO(existing, loadImageUrlsForIdempotent(existing.getMessageId()));
         }
         insertImages(message.getMessageId(), imageUrls);
         // 回查一次拿到数据库生成的创建时间，避免推送给前端的时间字段为空
@@ -239,6 +241,17 @@ public class MessageServiceImpl implements MessageService {
         return messageImageMapper.selectList(Wrappers.<MessageImage>lambdaQuery()
                         .eq(MessageImage::getMessageImageMessageId, messageId)
                         .orderByAsc(MessageImage::getMessageImageSort))
+                .stream()
+                .map(MessageImage::getMessageImageUrl)
+                .toList();
+    }
+
+    /** 幂等回查专用：锁定读装载消息图片，避免 REPEATABLE READ 快照漏掉并发赢家刚插入的图片行。 */
+    private List<String> loadImageUrlsForIdempotent(Long messageId) {
+        return messageImageMapper.selectList(Wrappers.<MessageImage>lambdaQuery()
+                        .eq(MessageImage::getMessageImageMessageId, messageId)
+                        .orderByAsc(MessageImage::getMessageImageSort)
+                        .last("FOR SHARE"))
                 .stream()
                 .map(MessageImage::getMessageImageUrl)
                 .toList();

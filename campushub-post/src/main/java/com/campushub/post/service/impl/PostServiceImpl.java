@@ -103,14 +103,16 @@ public class PostServiceImpl implements PostService {
             evictCache(post.getPostId());
         } catch (DuplicateKeyException exception) {
             // 唯一键冲突说明同一幂等键已插入成功，直接返回已存在的帖子；查不到说明命中的是已软删除的帖子
+            // 锁定读（当前读）：普通 SELECT 受 REPEATABLE READ 快照限制，可能读不到并发赢家刚提交的记录而误报 409；
+            // FOR SHARE 与唯一键冲突残留的 S 锁兼容，多个并发输家不会互相升级成 X 锁死锁
             Post existingPost = postMapper.selectOne(Wrappers.<Post>lambdaQuery()
                     .eq(Post::getPostUserId, userId)
                     .eq(Post::getPostIdempotencyKey, idempotencyKey)
-                    .last("LIMIT 1"));
+                    .last("LIMIT 1 FOR SHARE"));
             if (existingPost == null) {
                 throw new BusinessException(ErrorCode.CONFLICT, "帖子幂等键已被使用");
             }
-            return toPostVO(existingPost, loadImageUrls(existingPost.getPostId()));
+            return toPostVO(existingPost, loadImageUrlsForIdempotent(existingPost.getPostId()));
         }
         return getById(post.getPostId());
     }
@@ -381,6 +383,17 @@ public class PostServiceImpl implements PostService {
         return postImageMapper.selectList(Wrappers.<PostImage>lambdaQuery()
                         .eq(PostImage::getPostImagePostId, postId)
                         .orderByAsc(PostImage::getPostImageSort))
+                .stream()
+                .map(PostImage::getPostImageUrl)
+                .toList();
+    }
+
+    /** 幂等回查专用：锁定读装载帖子图片，避免 REPEATABLE READ 快照漏掉并发赢家刚插入的图片行。 */
+    private List<String> loadImageUrlsForIdempotent(Long postId) {
+        return postImageMapper.selectList(Wrappers.<PostImage>lambdaQuery()
+                        .eq(PostImage::getPostImagePostId, postId)
+                        .orderByAsc(PostImage::getPostImageSort)
+                        .last("FOR SHARE"))
                 .stream()
                 .map(PostImage::getPostImageUrl)
                 .toList();

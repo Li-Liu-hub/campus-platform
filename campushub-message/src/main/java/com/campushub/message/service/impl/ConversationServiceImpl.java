@@ -42,7 +42,9 @@ public class ConversationServiceImpl implements ConversationService {
      * <p>插入前把参与双方规范化为「小 ID 在前、大 ID 在后」，唯一键 uk_conversation_users
      * 保证一对用户至多一个会话——这比幂等键更强：换幂等键重试、对方反向发起同样被拦。
      * 冲突回查分两步：先按参与者双列回查（业务语义的重复），再按幂等键回查（同一请求重放），
-     * 两者都没有说明幂等键被别的会话占用，抛 409。
+     * 两者都没有说明幂等键被别的会话占用，抛 409。两步回查均为锁定读（FOR SHARE）：普通 SELECT
+     * 受 REPEATABLE READ 快照限制，可能读不到并发赢家刚提交的记录而误报 409；S 锁与唯一键冲突
+     * 残留的 S 锁兼容，多个并发输家不会互相升级成 X 锁死锁。
      *
      * @param request 创建请求，含目标用户 ID 与前端生成的幂等键
      * @return 会话信息；已存在时返回原会话
@@ -109,19 +111,19 @@ public class ConversationServiceImpl implements ConversationService {
         return toConversationVO(conversation, userId);
     }
 
-    /** 按参与者双列查询会话，未建会话时返回 null。 */
+    /** 按参与者双列查询会话，未建会话时返回 null；仅建会话回查调用，锁定读确保读到并发赢家刚提交的记录。 */
     private Conversation findByUsers(Long userAId, Long userBId) {
         return conversationMapper.selectOne(Wrappers.<Conversation>lambdaQuery()
                 .eq(Conversation::getConversationUserAId, userAId)
                 .eq(Conversation::getConversationUserBId, userBId)
-                .last("LIMIT 1"));
+                .last("LIMIT 1 FOR SHARE"));
     }
 
-    /** 按幂等键查询会话，未命中时返回 null。 */
+    /** 按幂等键查询会话，未命中时返回 null；锁定读语义同 findByUsers。 */
     private Conversation findByIdempotencyKey(String idempotencyKey) {
         return conversationMapper.selectOne(Wrappers.<Conversation>lambdaQuery()
                 .eq(Conversation::getConversationIdempotencyKey, idempotencyKey)
-                .last("LIMIT 1"));
+                .last("LIMIT 1 FOR SHARE"));
     }
 
     /** 校验会话存在且当前用户是参与者，否则抛出对应业务异常。 */

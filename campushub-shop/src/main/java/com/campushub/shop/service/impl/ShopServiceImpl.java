@@ -50,10 +50,12 @@ public class ShopServiceImpl implements ShopService {
             shopMapper.insert(shop);
         } catch (DuplicateKeyException exception) {
             // 唯一键冲突说明同一幂等键已插入成功，直接返回已存在的店铺；查不到说明命中的是已软删除的店铺
+            // 锁定读（当前读）：普通 SELECT 受 REPEATABLE READ 快照限制，可能读不到并发赢家刚提交的记录而误报 409；
+            // FOR SHARE 与唯一键冲突残留的 S 锁兼容，多个并发输家不会互相升级成 X 锁死锁
             Shop existingShop = shopMapper.selectOne(Wrappers.<Shop>lambdaQuery()
                     .eq(Shop::getShopUserId, userId)
                     .eq(Shop::getShopIdempotencyKey, idempotencyKey)
-                    .last("LIMIT 1"));
+                    .last("LIMIT 1 FOR SHARE"));
             if (existingShop == null) {
                 throw new BusinessException(ErrorCode.CONFLICT, "店铺幂等键已被使用");
             }

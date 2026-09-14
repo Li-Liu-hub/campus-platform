@@ -69,10 +69,12 @@ public class ProductServiceImpl implements ProductService {
             productMapper.insert(product);
         } catch (DuplicateKeyException exception) {
             // 唯一键冲突说明同一幂等键已插入成功，直接返回已存在的商品；查不到说明命中的是已软删除的商品
+            // 锁定读（当前读）：普通 SELECT 受 REPEATABLE READ 快照限制，可能读不到并发赢家刚提交的记录而误报 409；
+            // FOR SHARE 与唯一键冲突残留的 S 锁兼容，多个并发输家不会互相升级成 X 锁死锁
             Product existingProduct = productMapper.selectOne(Wrappers.<Product>lambdaQuery()
                     .eq(Product::getProductShopId, request.shopId())
                     .eq(Product::getProductIdempotencyKey, idempotencyKey)
-                    .last("LIMIT 1"));
+                    .last("LIMIT 1 FOR SHARE"));
             if (existingProduct == null) {
                 throw new BusinessException(ErrorCode.CONFLICT, "商品幂等键已被使用");
             }
