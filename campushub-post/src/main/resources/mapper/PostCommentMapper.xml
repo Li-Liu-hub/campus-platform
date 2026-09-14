@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campushub.post.mapper.PostCommentMapper">
+
+    <select id="selectParentPage" resultType="com.campushub.post.mapper.CommentListRow">
+        <!--
+          一级评论分页：JOIN 评论者与被回复者昵称（回复者已注销时昵称为空，前端自行占位），
+          走 idx_comment_post_father(post_id, father_id, comment_id)，游标与排序均为 (create_time, comment_id) 倒序。
+        -->
+        SELECT c.comment_id,
+               c.comment_post_id,
+               c.comment_sent_user_id,
+               su.user_nickname AS sent_user_nickname,
+               c.comment_father_id,
+               c.comment_receive_user_id,
+               ru.user_nickname AS receive_user_nickname,
+               c.comment_text,
+               c.create_time
+        FROM ch_post_comment c
+        LEFT JOIN ch_user su
+               ON su.user_id = c.comment_sent_user_id
+              AND su.user_is_delete = 0
+        LEFT JOIN ch_user ru
+               ON ru.user_id = c.comment_receive_user_id
+              AND ru.user_is_delete = 0
+        WHERE c.comment_post_id = #{postId}
+          AND c.comment_father_id = 0
+          AND c.comment_is_delete = 0
+        <if test="cursorTime != null and cursorId != null">
+            AND (c.create_time &lt; #{cursorTime}
+                OR (c.create_time = #{cursorTime} AND c.comment_id &lt; #{cursorId}))
+        </if>
+        ORDER BY c.create_time DESC, c.comment_id DESC
+        LIMIT #{pageSize}
+    </select>
+
+    <select id="selectRepliesByFatherIds" resultType="com.campushub.post.mapper.CommentListRow">
+        <!-- 二级回复批量取：一次 IN 查询覆盖当页全部一级评论，避免逐条回查（N+1）；按时间正序呈对话流 -->
+        SELECT c.comment_id,
+               c.comment_post_id,
+               c.comment_sent_user_id,
+               su.user_nickname AS sent_user_nickname,
+               c.comment_father_id,
+               c.comment_receive_user_id,
+               ru.user_nickname AS receive_user_nickname,
+               c.comment_text,
+               c.create_time
+        FROM ch_post_comment c
+        LEFT JOIN ch_user su
+               ON su.user_id = c.comment_sent_user_id
+              AND su.user_is_delete = 0
+        LEFT JOIN ch_user ru
+               ON ru.user_id = c.comment_receive_user_id
+              AND ru.user_is_delete = 0
+        WHERE c.comment_father_id IN
+        <foreach collection="fatherIds" item="fatherId" open="(" separator="," close=")">
+            #{fatherId}
+        </foreach>
+          AND c.comment_is_delete = 0
+        ORDER BY c.comment_id ASC
+    </select>
+
+    <!-- 单条评论回读的公共主体：与列表同结构 JOIN 昵称 -->
+    <sql id="commentRowBody">
+        SELECT c.comment_id,
+               c.comment_post_id,
+               c.comment_sent_user_id,
+               su.user_nickname AS sent_user_nickname,
+               c.comment_father_id,
+               c.comment_receive_user_id,
+               ru.user_nickname AS receive_user_nickname,
+               c.comment_text,
+               c.create_time
+        FROM ch_post_comment c
+        LEFT JOIN ch_user su
+               ON su.user_id = c.comment_sent_user_id
+              AND su.user_is_delete = 0
+        LEFT JOIN ch_user ru
+               ON ru.user_id = c.comment_receive_user_id
+              AND ru.user_is_delete = 0
+        WHERE c.comment_id = #{commentId}
+          AND c.comment_is_delete = 0
+    </sql>
+
+    <select id="selectRowById" resultType="com.campushub.post.mapper.CommentListRow">
+        <!-- 单条评论回读：供发表后的返回使用 -->
+        <include refid="commentRowBody"/>
+    </select>
+
+    <select id="selectRowByIdForShare" resultType="com.campushub.post.mapper.CommentListRow">
+        <!--
+          幂等回查专用：锁定读（当前读）绕过 REPEATABLE READ 快照，读到并发赢家刚提交的评论行——
+          普通 SELECT 复用旧快照会读不到该行，使重复提交被误判为“幂等键已被使用”；
+          S 锁与唯一键冲突残留的 S 锁兼容，多个并发输家不会互相升级成 X 锁死锁
+        -->
+        <include refid="commentRowBody"/>
+        FOR SHARE
+    </select>
+
+    <select id="countParentComments" resultType="long">
+        <!-- 一级评论总数，走 idx_comment_post_father 前两列 -->
+        SELECT COUNT(*)
+        FROM ch_post_comment
+        WHERE comment_post_id = #{postId}
+          AND comment_father_id = 0
+          AND comment_is_delete = 0
+    </select>
+
+</mapper>

@@ -17,6 +17,12 @@ public final class NotificationTypes {
     /** 帖子被收藏。 */
     public static final String COLLECT = "COLLECT";
 
+    /** 帖子被评论：评论者评了你的帖子。 */
+    public static final String COMMENT = "COMMENT";
+
+    /** 评论被回复：有人回复了你的评论。 */
+    public static final String REPLY = "REPLY";
+
     /** 常量类，禁止实例化。 */
     private NotificationTypes() {
     }
