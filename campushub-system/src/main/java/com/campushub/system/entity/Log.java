@@ -17,6 +17,10 @@ public class Log {
     @TableId(value = "log_id", type = IdType.ASSIGN_ID)
     private Long logId;
 
+    /** 事件唯一号（UUID）：消费端按它吸收 MQ 重复投递，取代原“类型+目标+时间”的秒级复合唯一键。 */
+    @TableField("log_event_id")
+    private String logEventId;
+
     /** 执行本次操作的用户主键，未登录操作允许为空。 */
     @TableField("log_user_id")
     private Long logUserId;

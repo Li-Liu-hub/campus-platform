@@ -5,6 +5,8 @@ package com.campushub.common.log;
  *
  * <p>时间字段统一使用 epoch 毫秒，避免 Java 时间类型在 JSON 序列化中的时区与格式歧义。
  *
+ * @param eventId     事件唯一号（UUID），生产端每条事件生成一次；消费端按它吸收重复投递，
+ *                    同一事件重投携带相同值，同秒同目标的不同事件互不误伤
  * @param type        操作类型，见 OperationTypes 常量
  * @param targetId    操作目标数据的主键，无具体目标时为 null
  * @param userId      操作用户 ID，未登录操作为 null
@@ -16,6 +18,7 @@ package com.campushub.common.log;
  *                    保证审计时间与操作时刻一致而非落库时刻
  */
 public record LogEvent(
+        String eventId,
         String type,
         Long targetId,
         Long userId,

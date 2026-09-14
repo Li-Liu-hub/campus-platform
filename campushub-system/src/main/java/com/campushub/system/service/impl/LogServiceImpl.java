@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.UUID;
 
 /** 日志基础 CRUD 业务实现，不区分用户权限。 */
 @Slf4j
@@ -26,10 +27,11 @@ public class LogServiceImpl implements LogService {
 
     private final LogMapper logMapper;
 
-    /** 创建日志并返回数据库生成时间。 */
+    /** 创建日志并返回数据库生成时间。管理端直写路径同样逐条生成事件号，保证与消费端共用同一唯一键语义。 */
     @Override
     public LogVO create(LogCreateRequest request) {
         Log log = new Log();
+        log.setLogEventId(UUID.randomUUID().toString());
         log.setLogUserId(request.logUserId());
         log.setLogUserIp(request.logUserIp().trim());
         log.setLogType(request.logType().trim());
@@ -72,9 +74,10 @@ public class LogServiceImpl implements LogService {
     /**
      * 功能：将操作日志事件幂等写入日志表，create_time 使用事件携带的操作发生时刻而非落库时刻。
      *
-     * <p>幂等语义：重复投递的事件插入时撞唯一键 (log_type, log_target_id, create_time)，
-     * 捕获后视为已消费按成功返回，触发容器 ACK 让 broker 删除消息——"行已存在 = 已消费"，
-     * 业务表即账本。注意唯一索引不约束 NULL，无目标操作的重复事件仍会重复落库，为已知边界。
+     * <p>幂等语义：按事件唯一号吸收重复投递——同一事件重投撞唯一键 uk_log_event_id，
+     * 捕获后视为已消费按成功返回，触发容器 ACK 让 broker 删除消息，“行已存在 = 已消费”，
+     * 业务表即账本。事件号在生成端逐条生成，因此同一秒内对同一目标的多次不同操作是不同事件，
+     * 不会像旧 (log_type, log_target_id, create_time) 复合键那样因秒级精度被误判丢弃。
      *
      * @param event 操作日志事件，由消息队列消费端传入
      * @throws Exception 插入失败且非唯一键冲突时抛出，触发容器本地重试与死信兜底
@@ -82,6 +85,8 @@ public class LogServiceImpl implements LogService {
     @Override
     public void insert(LogEvent event) {
         Log entity = new Log();
+        // 升级窗口内队列存量旧格式消息不带事件号，兜底生成以免撞 NOT NULL：这类消息重投去重不生效，日志重复无害
+        entity.setLogEventId(event.eventId() == null ? UUID.randomUUID().toString() : event.eventId());
         entity.setLogUserId(event.userId());
         entity.setLogUserIp(event.ip());
         entity.setLogType(event.type());
@@ -93,8 +98,8 @@ public class LogServiceImpl implements LogService {
         try {
             logMapper.insert(entity);
         } catch (DuplicateKeyException exception) {
-            log.info("操作日志重复投递已吸收，type={}，targetId={}，operateTime={}",
-                    event.type(), event.targetId(), event.operateTime());
+            log.info("操作日志重复投递已吸收，eventId={}，type={}，targetId={}",
+                    event.eventId(), event.type(), event.targetId());
         }
     }
 

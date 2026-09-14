@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -83,6 +84,8 @@ public class OperationLogAspect {
             long costTime = (System.nanoTime() - start) / 1_000_000;
             Long targetId = resolveTargetId(operationLog.targetId(), args);
             LogEvent event = new LogEvent(
+                    // 事件唯一号逐条生成：消费端按它吸收重复投递，同秒同目标的不同事件不会被误判
+                    UUID.randomUUID().toString(),
                     operationLog.type(),
                     targetId,
                     authenticationService.getCurrentUserId(),
